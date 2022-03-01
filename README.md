@@ -33,7 +33,7 @@ When using the laser module on Ender-3 S1 for the first time, please check if th
 Please connect the machine to power supply, turn on the power switch on the side, select "Control" - "Info", to check if the firmware version is V1.0.4 or above.
 
 ## How to install CrealityPrint software
-1、Please download “Creality Print” to install in.[Creality official website].(https://www.creality.com/download)
+1、Please download “Creality Print” to install in [Creality official website](https://www.creality.com/download)
 
 2、Double click to open the software installation package, click "Next-"Accept".
 
