@@ -6,9 +6,9 @@ This is the repository that contains the source code and the development version
 
 The firmware for the Creality Ender-3S1 is proudly based on Marlin2.0 byScott Lahteine (@thinkyhead), Roxanne Neufeld (@Roxy-3D), Chris Pepper (@p3p), Bob Kuhn (@Bob-the-Kuhn), João Brazio (@jbrazio), Erik van der Zalm (@ErikZalm) and is distributed under the terms of the GNU GPL 3 license.
 
-If you want to download the latest firmware version, go to Releases page and download the needed files. In the releases page you will find the source code and the SD Files needed for the LCD Display. After that, normally you need to update the SD files of the display and gradually complete the updates of menus, graphics and functionalities. 
+If you want to download the latest firmware version, go to Releases page and download the needed files. In the [releases](https://github.com/CrealityOfficial/Ender-3S1) page you will find the source code and the SD Files needed for the LCD Display. After that, normally you need to update the SD files of the display and gradually complete the updates of menus, graphics and functionalities. 
 
-Please refer to:.[YouTube].(https://youtu.be/B4egner2JMM)
+Please refer to: [YouTube](https://youtu.be/B4egner2JMM)
 In order to get instructions on how to flash the firmware and load new LCD SD files to the display. 
 
 
@@ -34,26 +34,39 @@ Please connect the machine to power supply, turn on the power switch on the side
 
 ## How to install CrealityPrint software
 1、Please download “Creality Print” to install in.[Creality official website].(https://www.creality.com/download)
+
 2、Double click to open the software installation package, click "Next-"Accept".
+
 3、Confirm the installation location of the software, click "Browse"-"Next"- "Install"-"Finish".
 
 ## How to use CrealityPrint software
 1、Add Ender 3S1 into software.
-2、	Make sure the current status is “Laser”.
+
+2、Make sure the current status is “Laser”.
+
 3、Click on the "Picture" button on the left and find the image file you need to engrave. Open to import the picture into the CrealityPrint software.
+
 4、Adjust the position, size, rotation angle and other parameters of the file in the right-hand console, setting the processing mode and working parameters, finally preview the processing effect of it.
+
 5、Finally, click on "Generate G-Code" to save the engraving file on the SD card.
 
 ## How to engrave
 1、Insert SD card into Ender 3S1 and turn on the power switch on the side.
+
 2、After Ender 3S1 is switched on, if you are using it for the first time, please select laser engrave.
+
 ### Notice: 
 1、To switch from fusing to laser engrave, select "Contror - "Switched Laser engraving"
+
 2、The software pops up the following prompt box. Please ensure that the laser module is installed correctly and select "Confirm". ( Please note that Laser module must be installed and disassembled only under power off)
+
 3、Place the engraving material under the laser head,counter-clockwise push the fixed focus bar, adjust the laser focus to the appropriate value through the knob (different thickness of the material corresponding to different values), until the focusing bar touches the engraved material surface when natural vertical down. Finally, clockwise push the focusing bar until it is attached by the magnet, then select "Finish”.
-Return to the main interface, select "Auto Home", wait for the machine back to zero completed
+Return to the main interface, select "Auto Home", wait for the machine back to zero completed.
+
 4、Select "Engrave" and press the knob to confirm. Select "Run Range", the laser head will move repeatedly around the maximum X and Y edges. You can adjust the engraving material to the right position.
+
 5、Press the “Directly Engrave” to start engraving. 
+
 ### Notice:
 When engraving or cutting thin objects (e.g. paper), the laser may penetrate the object and leave marks. It is recommended to put a flat object which laser cannot penetrate, such as aluminium or stainless steel plates, before you put the engraving material.
 
