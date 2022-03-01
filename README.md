@@ -76,10 +76,14 @@ You can develop more functions through the source code, such as water cooling, C
 Your feedback is very important to us, as it helps us improve even faster. Please test this firmware and let us know if it misbehaves in any way. We are standing by!
 
 In order to get responses in an efficient way, we recommend you to follow some guidelines:
-	First of all, search for related issues.
-	Detail the firmware version you're running.
-	Explain to us the error or bug, so that we can test it properly.
-	In the title, indicate the label of the issue. (For example: #issue)
+
+1、First of all, search for related issues.
+
+2、Detail the firmware version you're running.
+
+3、Explain to us the error or bug, so that we can test it properly.
+
+4、In the title, indicate the label of the issue. (For example: #issue)
 
 # Development Process
 The code is currently in development, trying to improve functionalities.
