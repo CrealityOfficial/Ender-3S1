@@ -35,31 +35,6 @@ void my_report_logical_position(const xyze_pos_t &rpos) {   //report_logical_pos
   SERIAL_ECHOPAIR_P(X_LBL, lpos.x, SP_Y_LBL, lpos.y, SP_Z_LBL, lpos.z, SP_E_LBL, lpos.e);
 }
 
-void minimize_power_consumption()
-{
-    Temperature::disable_all_heaters();
-    disable_all_steppers();        /*Turn off the motor to ensure enough power to write to the EEPROM */
-    // timer_pause(STEP_TIMER_DEV);   /*Stop steper timer*/
-    // timer_pause(TEMP_TIMER_DEV);   /*Stop temp timer*/
-    timer_disable_all();
-    rcc_clk_disable(RCC_TIMER5);
-    rcc_clk_disable(RCC_TIMER2);
-    rcc_clk_disable(RCC_ADC1);
-    rcc_clk_disable(RCC_ADC2);
-    rcc_clk_disable(RCC_ADC3);
-    rcc_clk_disable(RCC_USART1);
-    rcc_clk_disable(RCC_USART2);
-    rcc_clk_disable(RCC_USART3);
-    rcc_clk_disable(RCC_DMA1);
-    rcc_clk_disable(RCC_DMA2);
-    rcc_clk_disable(RCC_GPIOB);
-    rcc_clk_disable(RCC_GPIOC);
-    rcc_clk_disable(RCC_GPIOD);
-    
-    //DISABLE_ISRS(); 
-    //WDT_Disable(WDT);   // Make sure to completely disable the Watchdog
-}
-
 static void save()
  {   
       // Set Head and Foot to matching non-zero values
@@ -147,7 +122,8 @@ void PRE01PowerLoss::DoSomeThing()
     //if (!IS_SD_PRINTING() || millis() < ENSURE_POWER_SUPPLY_STABLE)return; // 为了暂停状态也要断电续打，所以将不在打印中断电必须取消
     if (millis() < ENSURE_POWER_SUPPLY_STABLE) return;
     float raw = Info.raw;
-    float voltage = (raw > 0) ? ((raw / (1024 + 1)) * POWER_CHECK_REFERENCE_VOL) : 2; //Ten-bit ADC acquisition 1 times
+    // 适配ADC分辨率。对于STM32 MAPLE库ADC分辨率设置为10位，对于STM32 HAL库ADC分辨率设置为12位
+    float voltage = (raw > 0) ? ((raw / (((uint32_t)1 << HAL_ADC_RESOLUTION) + 1)) * POWER_CHECK_REFERENCE_VOL) : 2; //Ten-bit ADC acquisition 1 times
     static uint8_t Count = 0;
     static bool power_loss_flag = false;     
     if ( voltage <= POWER_DOWN_THRESHOLD)
@@ -169,7 +145,6 @@ void PRE01PowerLoss::DoSomeThing()
     {
        OUT_WRITE(BACKPOWER_CTRL_PIN, HIGH);
        delay(50); 
-      //minimize_power_consumption();  //绝对不能要
         power_loss_flag = true;
         save();
         delay(100);

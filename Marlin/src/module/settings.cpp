@@ -480,6 +480,7 @@ typedef struct SettingsDataStruct {
     uint8_t ui_language;                                // M414 S
   #endif
 
+
 } SettingsData;
 
 //static_assert(sizeof(SettingsData) <= MARLIN_EEPROM_SIZE, "EEPROM too small to contain SettingsData!");
@@ -1442,6 +1443,7 @@ void MarlinSettings::postprocess() {
     #if HAS_MULTI_LANGUAGE
       EEPROM_WRITE(ui.language);
     #endif
+    
 
     //
     // Report final CRC and Data Size
@@ -1455,7 +1457,7 @@ void MarlinSettings::postprocess() {
 
       EEPROM_WRITE(version);
       EEPROM_WRITE(final_crc);
-
+    
       // Report storage size
       DEBUG_ECHO_MSG("Settings Stored (", eeprom_size, " bytes; crc ", (uint32_t)final_crc, ")");
 
@@ -2416,6 +2418,7 @@ void MarlinSettings::postprocess() {
           }
         }
       #endif
+
     }
 
     #if ENABLED(EEPROM_CHITCHAT) && DISABLED(DISABLE_M503)
@@ -2449,6 +2452,7 @@ void MarlinSettings::postprocess() {
 
   bool MarlinSettings::load() {
     if (validate()) {
+
       const bool success = _load();
       TERN_(EXTENSIBLE_UI, ExtUI::onConfigurationStoreRead(success));
       return success;

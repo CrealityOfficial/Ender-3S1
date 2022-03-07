@@ -154,6 +154,12 @@ public:
   static void getAbsFilenameInCWD(char *dst);
   static void printSelectedFilename();
   static void openAndPrintFile(const char *name);   // (working directory or full path)
+  
+  #if HAS_CUTTER 
+  //打开G-code文件，但是没有执行打印
+  static void openAndPausePrintFile(const char *name);
+  #endif
+
   static void startOrResumeFilePrinting();
   static void endFilePrintNow(TERN_(SD_RESORT, const bool re_sort=false));
   static void abortFilePrintNow(TERN_(SD_RESORT, const bool re_sort=false));

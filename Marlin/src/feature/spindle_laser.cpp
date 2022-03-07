@@ -35,13 +35,20 @@
 #endif
 
 SpindleLaser cutter;
-uint8_t SpindleLaser::power;
+uint8_t SpindleLaser::power = 0;
+
 #if ENABLED(LASER_FEATURE)
-  cutter_test_pulse_t SpindleLaser::testPulse = 50;                   // Test fire Pulse time ms value.
+  cutter_test_pulse_t SpindleLaser::testPulse = 50;                   // (ms) Test fire pulse default duration
+  uint8_t SpindleLaser::last_block_power;                             // Track power changes for dynamic power
+  feedRate_t SpindleLaser::feedrate_mm_m = 1500,
+             SpindleLaser::last_feedrate_mm_m; // = 0                 // (mm/min) Track feedrate changes for dynamic power
 #endif
-bool SpindleLaser::isReady;                                           // Ready to apply power setting from the UI to OCR
-cutter_power_t SpindleLaser::menuPower,                               // Power set via LCD menu in PWM, PERCENT, or RPM
-               SpindleLaser::unitPower;                               // LCD status power in PWM, PERCENT, or RPM
+
+bool SpindleLaser::isReady = false;                                   // Ready to apply power setting from the UI to OCR
+CutterMode SpindleLaser::cutter_mode = CUTTER_MODE_STANDARD;
+
+cutter_power_t SpindleLaser::menuPower = 0,                           // Power set via LCD menu in PWM, PERCENT, or RPM
+               SpindleLaser::unitPower = 0;                           // LCD status power in PWM, PERCENT, or RPM
 
 #if ENABLED(MARLIN_DEV_MODE)
   cutter_frequency_t SpindleLaser::frequency;                         // PWM frequency setting; range: 2K - 50K
@@ -54,7 +61,7 @@ cutter_power_t SpindleLaser::menuPower,                               // Power s
 void SpindleLaser::init() {
   #if ENABLED(SPINDLE_SERVO)
     MOVE_SERVO(SPINDLE_SERVO_NR, SPINDLE_SERVO_MIN);
-  #else
+  #else 
     OUT_WRITE(SPINDLE_LASER_ENA_PIN, !SPINDLE_LASER_ACTIVE_STATE);    // Init spindle to off
   #endif
   #if ENABLED(SPINDLE_CHANGE_DIR)
@@ -82,20 +89,24 @@ void SpindleLaser::init() {
    */
   void SpindleLaser::_set_ocr(const uint8_t ocr) {
     #if NEEDS_HARDWARE_PWM && SPINDLE_LASER_FREQUENCY
-      set_pwm_frequency(pin_t(SPINDLE_LASER_PWM_PIN), TERN(MARLIN_DEV_MODE, frequency, SPINDLE_LASER_FREQUENCY));
-      set_pwm_duty(pin_t(SPINDLE_LASER_PWM_PIN), ocr ^ SPINDLE_LASER_PWM_OFF);
-    #else
+      if(laser_device.is_laser_device()) {
+        laser_device.laser_power_start(ocr);
+      }else{
+        set_pwm_frequency(pin_t(SPINDLE_LASER_PWM_PIN), TERN(MARLIN_DEV_MODE, frequency, SPINDLE_LASER_FREQUENCY));
+        set_pwm_duty(pin_t(SPINDLE_LASER_PWM_PIN), ocr ^ SPINDLE_LASER_PWM_OFF);
+      }
+    #else 
       analogWrite(pin_t(SPINDLE_LASER_PWM_PIN), ocr ^ SPINDLE_LASER_PWM_OFF);
     #endif
   }
 
   void SpindleLaser::set_ocr(const uint8_t ocr) {
-    WRITE(SPINDLE_LASER_ENA_PIN,  SPINDLE_LASER_ACTIVE_STATE); // Cutter ON
+  // WRITE(SPINDLE_LASER_ENA_PIN,  SPINDLE_LASER_ACTIVE_STATE); // Cutter ON // 107011 -20210928
     _set_ocr(ocr);
   }
 
   void SpindleLaser::ocr_off() {
-    WRITE(SPINDLE_LASER_ENA_PIN, !SPINDLE_LASER_ACTIVE_STATE); // Cutter OFF
+  //  WRITE(SPINDLE_LASER_ENA_PIN, !SPINDLE_LASER_ACTIVE_STATE); // Cutter OFF //107011-20210928
     _set_ocr(0);
   }
 #endif
@@ -104,7 +115,7 @@ void SpindleLaser::init() {
 // Set cutter ON/OFF state (and PWM) to the given cutter power value
 //
 void SpindleLaser::apply_power(const uint8_t opwr) {
-  static uint8_t last_power_applied = 0;
+  static uint8_t last_power_applied =0;
   if (opwr == last_power_applied) return;
   last_power_applied = opwr;
   power = opwr;
@@ -124,7 +135,8 @@ void SpindleLaser::apply_power(const uint8_t opwr) {
   #elif ENABLED(SPINDLE_SERVO)
     MOVE_SERVO(SPINDLE_SERVO_NR, power);
   #else
-    WRITE(SPINDLE_LASER_ENA_PIN, enabled() ? SPINDLE_LASER_ACTIVE_STATE : !SPINDLE_LASER_ACTIVE_STATE);
+    //107011 -20210928
+    //WRITE(SPINDLE_LASER_ENA_PIN, enabled() ? SPINDLE_LASER_ACTIVE_STATE : !SPINDLE_LASER_ACTIVE_STATE);
     isReady = true;
   #endif
 }
@@ -162,5 +174,10 @@ void SpindleLaser::apply_power(const uint8_t opwr) {
   void SpindleLaser::air_assist_toggle()  { TOGGLE(AIR_ASSIST_PIN); } // Toggle state
 
 #endif // AIR_ASSIST
+
+  // 107011
+ class spindle_laser_soft_pwm laser_device;
+
+
 
 #endif // HAS_CUTTER

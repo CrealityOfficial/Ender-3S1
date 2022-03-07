@@ -1,6 +1,6 @@
 /**
  * Marlin 3D Printer Firmware
- * Copyright (c) 2021 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
  * Based on Sprinter and grbl.
  * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
@@ -20,26 +20,35 @@
  *
  */
 
+/**
+ * Platform-independent Arduino functions for I2C EEPROM.
+ * Enable USE_SHARED_EEPROM if not supplied by the framework.
+ */
+
+#if defined(STM32F1) || defined(STM32F4)
+
 #include "../../inc/MarlinConfig.h"
 
-#if ENABLED(AIR_EVACUATION)
+#if ENABLED(IIC_BL24CXX_EEPROM)
 
-#include "../gcode.h"
-#if HAS_CUTTER
-#include "../../feature/spindle_laser.h"
-#endif
-/**
- * M10: Vacuum or Blower On
- */
-void GcodeSuite::M10() {
-  cutter.air_evac_enable();   // Turn on Vacuum or Blower motor
+#include "../../libs/BL24CXX.h"
+#include "../shared/eeprom_if.h"
+
+void eeprom_init() { BL24CXX::init(); }
+
+// ------------------------
+// Public functions
+// ------------------------
+
+void eeprom_write_byte(uint8_t *pos, unsigned char value) {
+  const unsigned eeprom_address = (unsigned)pos;
+  return BL24CXX::writeOneByte(eeprom_address, value);
 }
 
-/**
- * M11: Vacuum or Blower OFF
- */
-void GcodeSuite::M11() {
-  cutter.air_evac_disable();  // Turn off Vacuum or Blower motor
+uint8_t eeprom_read_byte(uint8_t *pos) {
+  const unsigned eeprom_address = (unsigned)pos;
+  return BL24CXX::readOneByte(eeprom_address);
 }
 
-#endif // AIR_EVACUATION
+#endif // IIC_BL24CXX_EEPROM
+#endif // STM32F1 || STM32F4

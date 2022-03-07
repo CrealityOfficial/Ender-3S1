@@ -57,7 +57,9 @@ GCodeQueue queue;
   #include "../feature/repeat.h"
 #endif
 
-#include "../../lcd/dwin/e3v2/dwin.h"  //
+#if HAS_CUTTER
+  #include "../feature/spindle_laser.h"
+#endif
 
 // Frequently used G-code strings
 PGMSTR(G28_STR, "G28");
@@ -307,6 +309,48 @@ FORCE_INLINE bool is_M29(const char * const cmd) {  // matches "M29" & "M29 ", b
   return m29 && !NUMERIC(m29[3]);
 }
 
+
+#if HAS_CUTTER
+
+// 107011 -20210913 
+//读取;注释后的字符串， 回车结束
+void get_gcode_comment()
+{
+   char* p;
+   unsigned char i, inc=0, buf[30]={0};
+  while(1){
+      const int16_t n = card.get();
+      const bool card_eof = card.eof();
+      
+      if( (card_eof) || (n=='\n'))
+      {
+        for(i=LASER_MIN_X; i<=LASER_MAX_Y; i++){
+          p = strstr((char*)&buf[0], laser_device.laser_cmp_info[i]);
+          if(p) {
+            p+=5;
+            while(*p==' ') p++;
+            laser_device.set_laser_range((laser_device_range)i, atof(p));// = atof(p+5);
+            break;
+            //SERIAL_ECHOLNPAIR(laser_device.laser_cmp_info[i], laser_device.get_laser_range((laser_device_range)i));
+          }else if(p = strstr((char*)&buf[0], "estimated_time")) { // 读取gcode中的模型打印时间 107011 -20211116
+            p += strlen("estimated_time(s):");
+            while(*p==' ') p++;
+            laser_device.remain_time = atof(p)+59; // +59 解决转换为整型的分钟的小数点后被舍弃的问题
+            //SERIAL_ECHOLNPAIR("laser_device.remain_time=", laser_device.remain_time);
+            break;
+          }
+        }
+		//SERIAL_ECHO_MSG(buf); //107011
+        return;
+      }
+
+      buf[inc] = n;
+	  if(inc<29) inc++;
+
+  }
+}
+#endif // #if HAS_CUTTER
+
 #define PS_NORMAL 0
 #define PS_EOL    1
 #define PS_QUOTED 2
@@ -552,7 +596,7 @@ void GCodeQueue::get_serial_commands() {
   inline void GCodeQueue::get_sdcard_commands() 
   {
     static uint8_t sd_input_state = PS_NORMAL;
-    
+
     // Get commands if there are more in the file
     if (!IS_SD_FETCHING())  return;
     int sd_count = 0;
@@ -598,6 +642,38 @@ void GCodeQueue::get_serial_commands() {
 
 #endif // SDSUPPORT
 
+
+#if ENABLED(SDSUPPORT) && HAS_CUTTER
+
+  void get_sdcard_laser_range() 
+  {
+    // Get commands if there are more in the file
+    if( !((laser_device.is_read_gcode_range_on()) && (laser_device.is_laser_device()) && (IS_SD_PAUSED()))) return;
+
+    while (!card.eof()) 
+    {
+      const int16_t n = card.get();
+      const bool card_eof = card.eof();
+
+      if (n < 0 && !card_eof) { SERIAL_ERROR_MSG(STR_SD_ERR_READ); continue; }
+        
+      if(n==';'){
+        //SERIAL_ECHOLNPAIR("n=;", n);
+        get_gcode_comment(); //  读取;后的字符，直到回车/结束符
+      }else{
+          // 行首非‘;’的定为读取范围结束
+          //SERIAL_ECHOLNPAIR("n!=;", n);
+          card.setIndex(0);
+          laser_device.set_read_gcode_range_off();
+		  return;
+      }
+      
+    }
+  }
+
+#endif // SDSUPPORT
+
+
 /**
  * Add to the circular command queue the next command from:
  *  - The command-injection queues (injected_commands_P, injected_commands)
@@ -608,9 +684,17 @@ void GCodeQueue::get_available_commands() {
   if (ring_buffer.full()) return;
 
   get_serial_commands();
-
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()&&laser_device.is_read_gcode_range_on()&&IS_SD_PAUSED()){ // 解决FDM有时不打印的bug 107011 -20211110
+      get_sdcard_laser_range();
+    }else 
+  #endif
+  {
   TERN_(SDSUPPORT, get_sdcard_commands());
+  }
 }
+
+
 
 /**
  * Run the entire queue in-place. Blocks SD completion/abort until complete.
@@ -624,15 +708,12 @@ void GCodeQueue::exhaust() {
  * Get the next command in the queue, optionally log it to SD, then dispatch it
  */
 void GCodeQueue::advance() {
-//云打印中断料后禁止响应Gcode指令
-  if(HMI_flag.cloud_printing_flag&&HMI_flag.disable_queued_cmd)return; 
+
   // Process immediate commands
   if (process_injected_command_P() || process_injected_command()) return;
 
   // Return if the G-code buffer is empty
   if (ring_buffer.empty()) return;
-
- 
 
   #if ENABLED(SDSUPPORT)
 

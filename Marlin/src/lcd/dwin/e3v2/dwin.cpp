@@ -19,131 +19,104 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
-
 /**
  * DWIN by Creality3D
  */
-
 #include "../../../inc/MarlinConfigPre.h"
-
 #if ENABLED(DWIN_CREALITY_LCD)
-
 #include "dwin.h"
-
 #if ANY(AUTO_BED_LEVELING_BILINEAR, AUTO_BED_LEVELING_LINEAR, AUTO_BED_LEVELING_3POINT) && DISABLED(PROBE_MANUALLY)
-  #define HAS_ONESTEP_LEVELING 1
+#define HAS_ONESTEP_LEVELING 1
 #endif
-
 #if ANY(BABYSTEPPING, HAS_BED_PROBE, HAS_WORKSPACE_OFFSET)
-  #define HAS_ZOFFSET_ITEM 1
+#define HAS_ZOFFSET_ITEM 1
 #endif
-
 #if !HAS_BED_PROBE && ENABLED(BABYSTEPPING)
-  #define JUST_BABYSTEP 1
+#define JUST_BABYSTEP 1
 #endif
-
 #include <WString.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "../../fontutils.h"
 #include "../../marlinui.h"
-
 #include "../../../sd/cardreader.h"
-
 #include "../../../MarlinCore.h"
 #include "../../../core/serial.h"
 #include "../../../core/macros.h"
 #include "../../../gcode/queue.h"
-
 #include "../../../module/temperature.h"
 #include "../../../module/printcounter.h"
 #include "../../../module/motion.h"
 #include "../../../module/planner.h"
-
 #if ENABLED(EEPROM_SETTINGS)
-  #include "../../../module/settings.h"
+#include "../../../module/settings.h"
 #endif
-
 #if ENABLED(HOST_ACTION_COMMANDS)
-  #include "../../../feature/host_actions.h"
+#include "../../../feature/host_actions.h"
 #endif
-
 #if HAS_ONESTEP_LEVELING
-  #include "../../../feature/bedlevel/bedlevel.h"
+#include "../../../feature/bedlevel/bedlevel.h"
 #endif
-
 #if HAS_BED_PROBE
-  #include "../../../module/probe.h"
+#include "../../../module/probe.h"
 #endif
-
 #if EITHER(BABYSTEP_ZPROBE_OFFSET, JUST_BABYSTEP)
-  #include "../../../feature/babystep.h"
+#include "../../../feature/babystep.h"
 #endif
-
 #if ENABLED(POWER_LOSS_RECOVERY)
-  #include "../../../feature/powerloss.h"
+#include "../../../feature/powerloss.h"
 #endif
-
+#if ENABLED(LASER_FEATURE)
+#include "../../../feature/spindle_laser.h"
+#endif
+#include "../../../gcode/gcode.h"
 #ifndef MACHINE_SIZE
   #define MACHINE_SIZE STRINGIFY(X_BED_SIZE) "x" STRINGIFY(Y_BED_SIZE) "x" STRINGIFY(Z_MAX_POS)
 #endif
 #ifndef CORP_WEBSITE
-  #define CORP_WEBSITE WEBSITE_URL
+#define CORP_WEBSITE WEBSITE_URL
 #endif
 
 #define CORP_WEBSITE_C    "www.cxsw3d.com"
 #define CORP_WEBSITE_E    "www.creality.com"
+
 #define PAUSE_HEAT
 #define CHECKFILAMENT true
-
 #define USE_STRING_HEADINGS
 //#define USE_STRING_TITLES
-
 #define DWIN_FONT_MENU font8x16
 #define DWIN_FONT_STAT font10x20
 #define DWIN_FONT_HEAD font10x20
-
-#define MENU_CHAR_LIMIT  24
-#define STATUS_Y        360
-
+#define MENU_CHAR_LIMIT 24
+#define STATUS_Y 360
 // Print speed limit
-#define MIN_PRINT_SPEED  10
+#define MIN_PRINT_SPEED 10
 #define MAX_PRINT_SPEED 999
-
 // Feedspeed limit (max feedspeed = DEFAULT_MAX_FEEDRATE * 2)
-#define MIN_MAXFEEDSPEED      1
-#define MIN_MAXACCELERATION   1
-#define MIN_MAXJERK           0.1
-#define MIN_STEP              1
-
-#define FEEDRATE_E      (60)
-
+#define MIN_MAXFEEDSPEED 1
+#define MIN_MAXACCELERATION 1
+#define MIN_MAXJERK 0.1
+#define MIN_STEP 1
+#define FEEDRATE_E (60)
 // Minimum unit (0.1) : multiple (10)
 #define UNITFDIGITS 1
 #define MINUNITMULT pow(10, UNITFDIGITS)
-
-#define ENCODER_WAIT_MS                  20
-#define DWIN_VAR_UPDATE_INTERVAL         1024  
-#define DWIN_SCROLL_UPDATE_INTERVAL      SEC_TO_MS(0.5)  //rock_20210819
+#define ENCODER_WAIT_MS 20
+#define DWIN_VAR_UPDATE_INTERVAL 1024
+#define DWIN_SCROLL_UPDATE_INTERVAL SEC_TO_MS(0.5) //rock_20210819
 #define DWIN_REMAIN_TIME_UPDATE_INTERVAL SEC_TO_MS(20)
-
-constexpr uint16_t TROWS = 6, MROWS = TROWS - 1,        // Total rows, and other-than-Back
-                   TITLE_HEIGHT = 30,                   // Title bar height
-                   MLINE = 53,                          // Menu line height
-                   LBLX = 58,                           // Menu item label X  
-                   MENU_CHR_W = 8, STAT_CHR_W = 10;
-
+constexpr uint16_t TROWS = 6, MROWS = TROWS - 1, // Total rows, and other-than-Back
+    TITLE_HEIGHT = 30,                           // Title bar height
+    MLINE = 53,                                  // Menu line height
+    LBLX = 58,                                   // Menu item label X
+    MENU_CHR_W = 8, STAT_CHR_W = 10;
 #define MBASE(L) (49 + MLINE * (L))
-
 #define BABY_Z_VAR TERN(HAS_BED_PROBE, probe.offset.z, dwin_zoffset)
-
 /* Value Init */
 HMI_value_t HMI_ValueStruct;
 HMI_Flag_t HMI_flag{0};
 CRec CardRecbuf;//rock_20211021
 millis_t dwin_heat_time = 0;
-
 uint8_t checkkey = 0;
 static bool temp_remove_card_flag=false,temp_cutting_line_flag=false/*,temp_wifi_print_flag=false*/; /*0 沒有中断， 1 断料暂停  2 拔卡暂停*/
 typedef struct {
@@ -154,14 +127,11 @@ typedef struct {
   bool dec() { if (now) now--; return changed(); }
   bool inc(uint8_t v) { if (now < (v - 1)) now++; else now = (v - 1); return changed(); }
 } select_t;
-
 typedef struct
 {
   char filename[FILENAME_LENGTH];
   char longfilename[LONG_FILENAME_LENGTH];
 } PrintFile_InfoTypeDef;
-
-
 select_t select_page{0}, select_file{0}, select_print{0}, select_prepare{0}
          , select_control{0}, select_axis{0}, select_temp{0}, select_motion{0}, select_tune{0}
          , select_advset{0}, select_PLA{0}, select_ABS{0}
@@ -170,68 +140,61 @@ select_t select_page{0}, select_file{0}, select_print{0}, select_prepare{0}
          , select_jerk{0}
          , select_step{0}
          , select_item{0}
+         , select_laser_fdm{0}
          ;
-
 uint8_t index_file     = MROWS,
         index_prepare  = MROWS,
         index_control  = MROWS,
         index_leveling = MROWS,
-        index_tune     = MROWS,
-        index_advset   = MROWS;
-
+        index_tune = MROWS,
+        index_advset = MROWS;
 bool dwin_abort_flag = false; // Flag to reset feedrate, return to Home
-
-constexpr float default_max_feedrate[]        = DEFAULT_MAX_FEEDRATE;
-constexpr float default_max_acceleration[]    = DEFAULT_MAX_ACCELERATION;
-
+constexpr float default_max_feedrate[] = DEFAULT_MAX_FEEDRATE;
+constexpr float default_max_acceleration[] = DEFAULT_MAX_ACCELERATION;
 #if HAS_CLASSIC_JERK
-  constexpr float default_max_jerk[]          = { DEFAULT_XJERK, DEFAULT_YJERK, DEFAULT_ZJERK, DEFAULT_EJERK };
+constexpr float default_max_jerk[] = {DEFAULT_XJERK, DEFAULT_YJERK, DEFAULT_ZJERK, DEFAULT_EJERK};
 #endif
-
 static uint8_t _card_percent = 0;
+
 uint8_t Cloud_Progress_Bar=0; //云打印传输的进度条数据
 uint32_t _remain_time = 0;    //rock_20210830
 
 #if ENABLED(PAUSE_HEAT)
-  #if ENABLED(HAS_HOTEND)
-    uint16_t resume_hotend_temp = 0;
-  #endif
-  #if ENABLED(HAS_HEATED_BED)
-    uint16_t resume_bed_temp = 0;
-  #endif
+#if ENABLED(HAS_HOTEND)
+uint16_t resume_hotend_temp = 0;
 #endif
-
+#if ENABLED(HAS_HEATED_BED)
+uint16_t resume_bed_temp = 0;
+#endif
+#endif
 #if HAS_ZOFFSET_ITEM
-  float dwin_zoffset = 0, last_zoffset = 0;
+float dwin_zoffset = 0, last_zoffset = 0;
 #endif
-
-#define DWIN_LANGUAGE_EEPROM_ADDRESS 0x01   // Between 0x01 and 0x63 (EEPROM_OFFSET-1)
-                                            // BL24CXX::check() uses 0x00
-
+#define DWIN_LANGUAGE_EEPROM_ADDRESS 0x01 // Between 0x01 and 0x63 (EEPROM_OFFSET-1) 
+                                          // BL24CXX::check() uses 0x00
 /*获取指定g文件信息 *short_file_name:短文件名 *file:文件信息指针 返回值*/
 void get_file_info(char *short_file_name, PrintFile_InfoTypeDef *file)
 {
-  if(!card.isMounted()){
+  if (!card.isMounted())
+  {
     return;
   }
-
   card.getWorkDirName(); // 获取根目录
-  if(card.filename[0] != '/')
+  if (card.filename[0] != '/')
   {
     card.cdup();
   }
-	card.selectFileByName(short_file_name); // 选择文件
-	// 获取gcode文件信息
+  card.selectFileByName(short_file_name); // 选择文件
+                                          // 获取gcode文件信息
   strcpy(file->filename, card.filename);
   strcpy(file->longfilename, card.longFilename);
 }
-
 inline bool HMI_IsChinese() { return HMI_flag.language == DWIN_CHINESE; }
-
-void HMI_SetLanguageCache() 
+void HMI_SetLanguageCache()
 {
-  DWIN_JPG_CacheTo1(HMI_IsChinese() ? Language_Chinese : Language_English); 
+  DWIN_JPG_CacheTo1(HMI_IsChinese() ? Language_Chinese : Language_English);
 }
+
 void HMI_ResetLanguage()
 {
   if(HMI_IsChinese())
@@ -248,62 +211,90 @@ void HMI_SetLanguage() {
   #endif
   if((HMI_flag.language!=DWIN_ENGLISH) && (HMI_flag.language!=DWIN_CHINESE)) //rock_901122 解决第一次上电 语言混乱的问题
   {
-    HMI_flag.language=DWIN_ENGLISH;
-    BL24CXX::write(DWIN_LANGUAGE_EEPROM_ADDRESS, (uint8_t*)&HMI_flag.language, sizeof(HMI_flag.language));
+    HMI_flag.language = DWIN_ENGLISH;
+    BL24CXX::write(DWIN_LANGUAGE_EEPROM_ADDRESS, (uint8_t *)&HMI_flag.language, sizeof(HMI_flag.language));
   }
   HMI_SetLanguageCache();
 }
-
-void HMI_ToggleLanguage() 
+void HMI_ToggleLanguage()
 {
-  HMI_flag.language = HMI_IsChinese() ? DWIN_ENGLISH : DWIN_CHINESE;  //
+  HMI_flag.language = HMI_IsChinese() ? DWIN_ENGLISH : DWIN_CHINESE; //
   HMI_SetLanguageCache();
-  #if BOTH(EEPROM_SETTINGS, IIC_BL24CXX_EEPROM)
-    BL24CXX::write(DWIN_LANGUAGE_EEPROM_ADDRESS, (uint8_t*)&HMI_flag.language, sizeof(HMI_flag.language));
-  #endif
+#if BOTH(EEPROM_SETTINGS, IIC_BL24CXX_EEPROM)
+  BL24CXX::write(DWIN_LANGUAGE_EEPROM_ADDRESS, (uint8_t *)&HMI_flag.language, sizeof(HMI_flag.language));
+#endif
 }
 
-void DWIN_Draw_Signed_Float(uint8_t size, uint16_t bColor, uint8_t iNum, uint8_t fNum, uint16_t x, uint16_t y, long value) {
-  if (value < 0) 
+void DWIN_Draw_Signed_Float(uint8_t size, uint16_t bColor, uint8_t iNum, uint8_t fNum, uint16_t x, uint16_t y, long value)
+{
+  if (value < 0)
   {
     DWIN_Draw_String(false, true, size, Color_White, bColor, x - 6, y, F("-"));
     DWIN_Draw_FloatValue(true, true, 0, size, Color_White, bColor, iNum, fNum, x, y, -value);
   }
-  else 
+  else
   {
     DWIN_Draw_String(false, true, size, Color_White, bColor, x - 6, y, F(" "));
     DWIN_Draw_FloatValue(true, true, 0, size, Color_White, bColor, iNum, fNum, x, y, value);
   }
 }
-
-void ICON_Print() {
-  if (select_page.now == 0) {
+void ICON_Print()
+{
+  if (select_page.now == 0)
+  {// 选中
     DWIN_ICON_Show(ICON, ICON_Print_1, 17, 130);
     DWIN_Draw_Rectangle(0, Color_White, 17, 130, 126, 229);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 1, 447, 28, 460, 58, 201);
-    else
-      DWIN_Frame_AreaCopy(1, 1, 451, 31, 463, 57, 201);
+
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device())//激光模式下主页 雕刻 显示
+      {
+        if (HMI_IsChinese())
+          DWIN_Frame_AreaCopy(1, 205, 423, 233, 437, 58, 201);
+        else
+          DWIN_Frame_AreaCopy(1, 167, 403, 224, 421, 47, 200);
+      }else
+    #endif
+    {
+      if (HMI_IsChinese())
+        DWIN_Frame_AreaCopy(1, 1,405, 28,418, 58, 201); //DWIN_Frame_AreaCopy(1, 1, 447, 28, 460, 58, 201);
+      else
+        DWIN_Frame_AreaCopy(1, 1, 423, 31, 435, 57, 201);//DWIN_Frame_AreaCopy(1, 1, 451, 31, 463, 57, 201);
+    }
   }
-  else {
-    DWIN_ICON_Show(ICON, ICON_Print_0, 17, 130);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 1, 405, 28, 420, 58, 201);
-    else
-      DWIN_Frame_AreaCopy(1, 1, 423, 31, 435, 57, 201);
+  else
+  {// 未选中
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device())//激光模式下主页 雕刻 显示
+    {
+      DWIN_ICON_Show(ICON, ICON_Print_0, 17, 130);
+      if (HMI_IsChinese())
+        DWIN_Frame_AreaCopy(1, 205, 423, 233, 437, 58, 201);
+      else
+        DWIN_Frame_AreaCopy(1, 167, 403, 224, 421, 47, 200);
+    }else
+    #endif
+    {
+      DWIN_ICON_Show(ICON, ICON_Print_0, 17, 130);
+      if (HMI_IsChinese())
+        DWIN_Frame_AreaCopy(1, 1, 405, 28, 420, 58, 201);
+      else
+        DWIN_Frame_AreaCopy(1, 1, 423, 31, 435, 57, 201);
+    }
   }
 }
-
-void ICON_Prepare() {
-  if (select_page.now == 1) {
+void ICON_Prepare()
+{
+  if (select_page.now == 1)
+  {
     DWIN_ICON_Show(ICON, ICON_Prepare_1, 145, 130);
     DWIN_Draw_Rectangle(0, Color_White, 145, 130, 254, 229);
     if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 31, 447, 58, 460, 186, 201);
+      DWIN_Frame_AreaCopy(1, 31, 405, 58, 420, 186, 201);//DWIN_Frame_AreaCopy(1, 31, 447, 58, 460, 186, 201);
     else
-      DWIN_Frame_AreaCopy(1, 33, 451, 82, 466, 175, 201);
+      DWIN_Frame_AreaCopy(1, 33, 423, 82, 438, 175, 201);//DWIN_Frame_AreaCopy(1, 33, 451, 82, 466 - 2, 175, 201); // 107011 -20210927
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Prepare_0, 145, 130);
     if (HMI_IsChinese())
       DWIN_Frame_AreaCopy(1, 31, 405, 58, 420, 186, 201);
@@ -311,17 +302,19 @@ void ICON_Prepare() {
       DWIN_Frame_AreaCopy(1, 33, 423, 82, 438, 175, 201);
   }
 }
-
-void ICON_Control() {
-  if (select_page.now == 2) {
+void ICON_Control()
+{
+  if (select_page.now == 2)
+  {
     DWIN_ICON_Show(ICON, ICON_Control_1, 17, 246);
     DWIN_Draw_Rectangle(0, Color_White, 17, 246, 126, 345);
     if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 61, 447, 88, 460, 58, 318);
+      DWIN_Frame_AreaCopy(1, 61, 405, 88, 420, 58, 318);
     else
-      DWIN_Frame_AreaCopy(1, 85, 451, 132, 463, 48, 318);
+      DWIN_Frame_AreaCopy(1, 85, 423, 132, 434, 48, 318);//DWIN_Frame_AreaCopy(1, 85, 451, 132, 463, 48, 318);
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Control_0, 17, 246);
     if (HMI_IsChinese())
       DWIN_Frame_AreaCopy(1, 61, 405, 88, 420, 58, 318);
@@ -329,9 +322,10 @@ void ICON_Control() {
       DWIN_Frame_AreaCopy(1, 85, 423, 132, 434, 48, 318);
   }
 }
-
-void ICON_StartInfo(bool show) {
-  if (show) {
+void ICON_StartInfo(bool show)
+{
+  if (show)
+  {
     DWIN_ICON_Show(ICON, ICON_Info_1, 145, 246);
     DWIN_Draw_Rectangle(0, Color_White, 145, 246, 254, 345);
     if (HMI_IsChinese())
@@ -339,7 +333,8 @@ void ICON_StartInfo(bool show) {
     else
       DWIN_Frame_AreaCopy(1, 132, 451, 159, 466, 186, 318);
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Info_0, 145, 246);
     if (HMI_IsChinese())
       DWIN_Frame_AreaCopy(1, 91, 405, 118, 420, 186, 318);
@@ -347,213 +342,297 @@ void ICON_StartInfo(bool show) {
       DWIN_Frame_AreaCopy(1, 132, 423, 159, 435, 186, 318);
   }
 }
-
 //rock_20210726
-void ICON_Leveling(bool show) {
-  if (show) {
+void ICON_Leveling(bool show)
+{
+  if (show)
+  {
     DWIN_ICON_Show(ICON, ICON_Leveling_1, 145, 246);
     DWIN_Draw_Rectangle(0, Color_White, 145, 246, 254, 345);
     if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 211, 447, 238, 460, 186, 318);
-    else 
-      DWIN_Frame_AreaCopy(1, 84, 465, 120,  478, 182, 318); //rock 
-      //DWIN_Frame_AreaCopy(1, 84, 437, 120,  449, 182, 318);
+      DWIN_Frame_AreaCopy(1, 211, 405, 238, 420, 186, 318);//DWIN_Frame_AreaCopy(1, 211, 447, 238, 460, 186, 318);
+    else
+      DWIN_Frame_AreaCopy(1, 84, 437, 120, 449, 182, 318);//DWIN_Frame_AreaCopy(1, 84, 465, 120, 478, 182, 318); //rock
+                                                           //DWIN_Frame_AreaCopy(1, 84, 437, 120,  449, 182, 318);
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Leveling_0, 145, 246);
     if (HMI_IsChinese())
       DWIN_Frame_AreaCopy(1, 211, 405, 238, 420, 186, 318);
-    else 
-      DWIN_Frame_AreaCopy(1, 84, 437, 120,  449, 182, 318);
-      //DWIN_Frame_AreaCopy(1, 84, 465, 120, 478, 182, 318);
+    else
+      DWIN_Frame_AreaCopy(1, 84, 437, 120, 449, 182, 318);
+    //DWIN_Frame_AreaCopy(1, 84, 465, 120, 478, 182, 318);
   }
 }
 
-void ICON_Tune() {
-  if (select_print.now == 0) {
+#if HAS_CUTTER
+//回零
+// 107011 -20210923
+void ICON_AutoHome()
+{
+  if (select_page.now == 3)
+  { //选中
+    DWIN_ICON_Show(ICON, ICON_AutoHome_1, 145, 246);
+    DWIN_Draw_Rectangle(0, Color_White, 145, 246, 254, 345);
+    if (HMI_IsChinese())
+    {
+      DWIN_Frame_AreaCopy(1, 177, 421, 205, 435, 186, 318);//DWIN_Frame_AreaCopy(1, 120, 460, 148, 475, 186, 318);
+    }
+    else
+    {
+      DWIN_Frame_AreaCopy(1, 96, 403, 167, 416, 163, 318);//DWIN_Frame_AreaCopy(1, 183+1, 466-1, 255, 478, 163, 318);
+    }
+  }
+  else
+  { //未选中
+    DWIN_ICON_Show(ICON, ICON_AutoHome_0, 145, 246);
+    if (HMI_IsChinese())
+    {
+      DWIN_Frame_AreaCopy(1, 177, 421, 205, 435, 186, 318);
+    }
+    else
+    {
+      DWIN_Frame_AreaCopy(1, 96, 403, 167, 416, 163, 318);
+    }
+  }
+}
+#endif
+
+void ICON_Tune()
+{
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device() && laser_device.laser_printing )
+    {
+      DWIN_ICON_Show(ICON, ICON_GRAY_TUNE, 8, 252);
+      if (HMI_IsChinese())
+        //DWIN_Frame_AreaCopy(1, 121, 447, 148, 458, 34, 325);
+        DWIN_ICON_Show(ICON, LABEL_GRAY_TUNE_C, 8, 325);
+      else
+        //DWIN_Frame_AreaCopy(1, 0, 466, 34, 476, 31, 325);
+        DWIN_ICON_Show(ICON, LABEL_GRAY_TUNE_E, 8, 325);
+        
+      return; 
+    }
+  #endif
+
+  if (select_print.now == 0)
+  {
     DWIN_ICON_Show(ICON, ICON_Setup_1, 8, 252);
     DWIN_Draw_Rectangle(0, Color_White, 8, 252, 87, 351);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 121, 447, 148, 458, 34, 325);
-    else
-      DWIN_Frame_AreaCopy(1,   0, 466,  34, 476, 31, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 121, 447, 148, 458, 34, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 0, 466, 34, 476, 31, 325);
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Setup_0, 8, 252);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 121, 405, 148, 420, 34, 325);
-    else
-      DWIN_Frame_AreaCopy(1,   0, 438,  32, 448, 31, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 121, 405, 148, 420, 34, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 0, 438, 32, 448, 31, 325);
   }
+
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 121, 405, 148, 420, 34, 325);
+  else
+    DWIN_Frame_AreaCopy(1, 0, 438, 32, 448, 31, 325);
+
 }
 //打印暂停
 void ICON_Pause() 
 {
-  if (select_print.now == 1) {
+  if (select_print.now == 1)
+  {
     DWIN_ICON_Show(ICON, ICON_Pause_1, 96, 252);
     DWIN_Draw_Rectangle(0, Color_White, 96, 252, 175, 351);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 181, 447, 208, 459, 124, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 177, 451, 216, 462, 116, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 181, 447, 208, 459, 124, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 177, 451, 216, 462, 116, 325);
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Pause_0, 96, 252);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 181, 405, 208, 420, 124, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 177, 423, 215, 433, 116, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 181, 405, 208, 420, 124, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 177, 423, 215, 433, 116, 325);
   }
+
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 181, 405, 208, 420, 124, 325);
+  else
+    DWIN_Frame_AreaCopy(1, 177, 423, 215, 433, 116, 325);
 }
+
 //继续打印
 void ICON_Continue() {
   if (select_print.now == 1) 
   {
     DWIN_ICON_Show(ICON, ICON_Continue_1, 96, 252);
     DWIN_Draw_Rectangle(0, Color_White, 96, 252, 175, 351);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 1, 447, 28, 460, 124, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 1, 452, 32, 464, 121, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 1, 447, 28, 460, 124, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 1, 452, 32, 464, 121, 325);
   }
-  else 
+  else
   {
     DWIN_ICON_Show(ICON, ICON_Continue_0, 96, 252);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 1, 405, 28, 420, 124, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 1, 424, 31, 434, 121, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 1, 405, 28, 420, 124, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 1, 424, 31, 434, 121, 325);
   }
-}
+  
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 1, 405, 28, 420, 124, 325);
+  else
+    DWIN_Frame_AreaCopy(1, 1, 424, 31, 434, 121, 325);
 
-void ICON_Stop() {
-  if (select_print.now == 2) {
+}
+void ICON_Stop()
+{
+  if (select_print.now == 2)
+  {
     DWIN_ICON_Show(ICON, ICON_Stop_1, 184, 252);
     DWIN_Draw_Rectangle(0, Color_White, 184, 252, 263, 351);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 151, 447, 178, 459, 210, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 218, 451, 249, 468, 209, 325);  //rock_20210727
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 151, 447, 178, 459, 210, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 218, 451, 249, 468 - 5, 209, 325); //rock_20210727 //107011-20210924
   }
-  else {
+  else
+  {
     DWIN_ICON_Show(ICON, ICON_Stop_0, 184, 252);
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1, 151, 405, 178, 420, 210, 325);
-    else
-      DWIN_Frame_AreaCopy(1, 218, 423, 247, 436, 209, 325);
+    // if (HMI_IsChinese())
+    //   DWIN_Frame_AreaCopy(1, 151, 405, 178, 420, 210, 325);
+    // else
+    //   DWIN_Frame_AreaCopy(1, 218, 423, 247, 436, 209, 325);
   }
-}
 
-void Clear_Title_Bar() {
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 151, 405, 178, 420, 210, 325);
+  else
+    DWIN_Frame_AreaCopy(1, 218, 423, 247, 436, 209, 325);
+
+}
+void Clear_Title_Bar()
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Blue, 0, 0, DWIN_WIDTH, 30);
 }
-void Clear_Remain_Time() 
+void Clear_Remain_Time()
 {
-  DWIN_Draw_Rectangle(1, Color_Bg_Black, 176, 212,200+20, 212+30);
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 176, 212, 200 + 20, 212 + 30);
 }
-void Clear_Print_Time() 
+void Clear_Print_Time()
 {
-  DWIN_Draw_Rectangle(1, Color_Bg_Black,  42, 212, 66 + 20, 212+30);
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 42, 212, 66 + 20, 212 + 30);
 }
-void Draw_Title(const char * const title) {
-  DWIN_Draw_String(false, false, DWIN_FONT_HEAD, Color_White, Color_Bg_Blue, 14, 4, (char*)title);
+void Draw_Title(const char *const title)
+{
+  DWIN_Draw_String(false, false, DWIN_FONT_HEAD, Color_White, Color_Bg_Blue, 14, 4, (char *)title);
 }
-
-void Draw_Title(const __FlashStringHelper * title) {
-  DWIN_Draw_String(false, false, DWIN_FONT_HEAD, Color_White, Color_Bg_Blue, 14, 4, (char*)title);
+void Draw_Title(const __FlashStringHelper *title)
+{
+  DWIN_Draw_String(false, false, DWIN_FONT_HEAD, Color_White, Color_Bg_Blue, 14, 4, (char *)title);
 }
-
-void Clear_Menu_Area() {
+void Clear_Menu_Area()
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, 31, DWIN_WIDTH, STATUS_Y - 1);
 }
-
-void Clear_Main_Window() {
+void Clear_Status_Area()
+{
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, STATUS_Y, DWIN_WIDTH, DWIN_HEIGHT - 1);
+}
+void Clear_Main_Window()
+{
   Clear_Title_Bar();
   Clear_Menu_Area();
 }
-
-void Clear_Popup_Area() {
+void Clear_Popup_Area()
+{
   Clear_Title_Bar();
   DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, 31, DWIN_WIDTH, DWIN_HEIGHT);
 }
-
-void Draw_Popup_Bkgd_105() {
+void Draw_Popup_Bkgd_105()
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 105, 258, 374);
 }
-
-void Draw_More_Icon(const uint8_t line) {
+void Draw_More_Icon(const uint8_t line)
+{
   DWIN_ICON_Show(ICON, ICON_More, 226, MBASE(line) - 3);
 }
-
-void Draw_Menu_Cursor(const uint8_t line) {
+void Draw_Menu_Cursor(const uint8_t line)
+{
   // DWIN_ICON_Show(ICON,ICON_Rectangle, 0, MBASE(line) - 18);
   DWIN_Draw_Rectangle(1, Rectangle_Color, 0, MBASE(line) - 18, 14, MBASE(line + 1) - 20);
 }
-
-void Erase_Menu_Cursor(const uint8_t line) {
+void Erase_Menu_Cursor(const uint8_t line)
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, MBASE(line) - 18, 14, MBASE(line + 1) - 20);
 }
-
-void Move_Highlight(const int16_t from, const uint16_t newline) {
+void Move_Highlight(const int16_t from, const uint16_t newline)
+{
   Erase_Menu_Cursor(newline - from);
   Draw_Menu_Cursor(newline);
 }
-
-void Add_Menu_Line() {
+void Add_Menu_Line()
+{
   Move_Highlight(1, MROWS);
   DWIN_Draw_Line(Line_Color, 16, MBASE(MROWS + 1) - 20, 256, MBASE(MROWS + 1) - 19);
 }
-
-void Scroll_Menu(const uint8_t dir) {
+void Scroll_Menu(const uint8_t dir)
+{
   DWIN_Frame_AreaMove(1, dir, MLINE, Color_Bg_Black, 0, 31, DWIN_WIDTH, 349);
   switch (dir) {
     case DWIN_SCROLL_DOWN: Move_Highlight(-1, 0); break;
     case DWIN_SCROLL_UP:   Add_Menu_Line(); break;
   }
 }
-
-inline uint16_t nr_sd_menu_items() {
+inline uint16_t nr_sd_menu_items()
+{
   return card.get_num_Files() + !card.flag.workDirIsRoot;
 }
-
-void Draw_Menu_Icon(const uint8_t line, const uint8_t icon) {
+void Draw_Menu_Icon(const uint8_t line, const uint8_t icon)
+{
   DWIN_ICON_Show(ICON, icon, 26, MBASE(line) - 3);
 }
-
-void Erase_Menu_Text(const uint8_t line) {
+void Erase_Menu_Text(const uint8_t line)
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Black, LBLX, MBASE(line) - 14, 271, MBASE(line) + 28);
 }
-
 void Draw_Menu_Item(const uint8_t line, const uint8_t icon=0, const char * const label=nullptr, bool more=false) {
   if (label) DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, LBLX, MBASE(line) - 1, (char*)label);
   if (icon) Draw_Menu_Icon(line, icon);
   if (more) Draw_More_Icon(line);
 }
-
-void Draw_Menu_Line(const uint8_t line, const uint8_t icon=0, const char * const label=nullptr, bool more=false) {
+void Draw_Menu_Line(const uint8_t line, const uint8_t icon = 0, const char *const label = nullptr, bool more = false)
+{
   Draw_Menu_Item(line, icon, label, more);
   DWIN_Draw_Line(Line_Color, 16, MBASE(line) + 33, 256, MBASE(line) + 34);
 }
-
-void Draw_Chkb_Line(const uint8_t line, const bool mode) {
+void Draw_Chkb_Line(const uint8_t line, const bool mode)
+{
   DWIN_Draw_Checkbox(Color_White, Color_Bg_Black, 225, MBASE(line) - 1, mode);
 }
-
 // The "Back" label is always on the first line
-void Draw_Back_Label() {
+void Draw_Back_Label()
+{
   if (HMI_IsChinese())
     DWIN_Frame_AreaCopy(1, 129, 72, 156, 84, LBLX, MBASE(0));
   else
     DWIN_Frame_AreaCopy(1, 226, 179, 256, 189, LBLX, MBASE(0));
 }
-
 // Draw "Back" line at the top
-void Draw_Back_First(const bool is_sel=true) {
+void Draw_Back_First(const bool is_sel = true)
+{
   Draw_Menu_Line(0, ICON_Back);
   Draw_Back_Label();
   if (is_sel) Draw_Menu_Cursor(0);
 }
-
 inline bool Apply_Encoder(const ENCODER_DiffState &encoder_diffState, auto &valref) {
   bool temp_var=false;
   if (encoder_diffState == ENCODER_DIFF_CW)
@@ -562,6 +641,7 @@ inline bool Apply_Encoder(const ENCODER_DiffState &encoder_diffState, auto &valr
     if(valref>(EXTRUDE_MAXLENGTH_e * MINUNITMULT))valref=(EXTRUDE_MAXLENGTH_e * MINUNITMULT);
   }
   else if (encoder_diffState == ENCODER_DIFF_CCW)
+
     valref -= EncoderRate.encoderMoveValue;
   else if(encoder_diffState == ENCODER_DIFF_ENTER)
   {
@@ -569,55 +649,85 @@ inline bool Apply_Encoder(const ENCODER_DiffState &encoder_diffState, auto &valr
   }
   return temp_var; 
 }
-
 //
 // Draw Menus
 //
-
-#define MOTION_CASE_RATE   1
-#define MOTION_CASE_ACCEL  2
-#define MOTION_CASE_JERK   (MOTION_CASE_ACCEL + ENABLED(HAS_CLASSIC_JERK))
-#define MOTION_CASE_STEPS  (MOTION_CASE_JERK + 1)
-#define MOTION_CASE_TOTAL  MOTION_CASE_STEPS
-
-#define PREPARE_CASE_MOVE  1
-#define PREPARE_CASE_DISA  2
-#define PREPARE_CASE_HOME  3
+#define MOTION_CASE_RATE 1
+#define MOTION_CASE_ACCEL 2
+#define MOTION_CASE_JERK (MOTION_CASE_ACCEL + ENABLED(HAS_CLASSIC_JERK))
+#define MOTION_CASE_STEPS (MOTION_CASE_JERK + 1)
+#define MOTION_CASE_TOTAL MOTION_CASE_STEPS
+#define PREPARE_CASE_MOVE 1
+#define PREPARE_CASE_DISA 2
+#define PREPARE_CASE_HOME 3
 #define PREPARE_CASE_ZOFF (PREPARE_CASE_HOME + ENABLED(HAS_ZOFFSET_ITEM))
-#define PREPARE_CASE_PLA  (PREPARE_CASE_ZOFF + ENABLED(HAS_HOTEND))
-#define PREPARE_CASE_ABS  (PREPARE_CASE_PLA + ENABLED(HAS_HOTEND))
+#define PREPARE_CASE_PLA (PREPARE_CASE_ZOFF + ENABLED(HAS_HOTEND))
+#define PREPARE_CASE_ABS (PREPARE_CASE_PLA + ENABLED(HAS_HOTEND))
 #define PREPARE_CASE_COOL (PREPARE_CASE_ABS + EITHER(HAS_HOTEND, HAS_HEATED_BED))
 #define PREPARE_CASE_LANG (PREPARE_CASE_COOL + 1)
 #define PREPARE_CASE_TOTAL PREPARE_CASE_LANG
-
+// 107011 -20210924
+// #define CONTROL_CASE_TEMP 1
+// #define  CONTROL_CASE_MOVE  (CONTROL_CASE_TEMP + 1)
+// #define CONTROL_CASE_SAVE  (CONTROL_CASE_MOVE + ENABLED(EEPROM_SETTINGS))
+// #define CONTROL_CASE_LOAD  (CONTROL_CASE_SAVE + ENABLED(EEPROM_SETTINGS))
+// #define CONTROL_CASE_RESET (CONTROL_CASE_LOAD + ENABLED(EEPROM_SETTINGS))
 #define CONTROL_CASE_TEMP 1
-#define  CONTROL_CASE_MOVE  (CONTROL_CASE_TEMP + 1)
-#define CONTROL_CASE_SAVE  (CONTROL_CASE_MOVE + ENABLED(EEPROM_SETTINGS))
-#define CONTROL_CASE_LOAD  (CONTROL_CASE_SAVE + ENABLED(EEPROM_SETTINGS))
-#define CONTROL_CASE_RESET (CONTROL_CASE_LOAD + ENABLED(EEPROM_SETTINGS))
-
+#define CONTROL_CASE_MOVE (CONTROL_CASE_TEMP + 1)
+#define CONTROL_CASE_SAVE (CONTROL_CASE_MOVE + ENABLED(EEPROM_SETTINGS))
+#define CONTROL_CASE_LOAD (CONTROL_CASE_SAVE + ENABLED(EEPROM_SETTINGS))
+#define CONTROL_CASE_SW_LASER (CONTROL_CASE_LOAD + 1)
+#define CONTROL_CASE_RESET (CONTROL_CASE_SW_LASER + ENABLED(EEPROM_SETTINGS))
+//end 107011
 //#define CONTROL_CASE_ADVSET (CONTROL_CASE_RESET + 1)  //rock_20210726
 //#define CONTROL_CASE_INFO  (CONTROL_CASE_ADVSET + 1)
-#define CONTROL_CASE_INFO  (CONTROL_CASE_RESET + 1)
+#define CONTROL_CASE_INFO (CONTROL_CASE_RESET + 1)
 #define CONTROL_CASE_TOTAL CONTROL_CASE_INFO
-
 #define TUNE_CASE_SPEED 1
 #define TUNE_CASE_TEMP (TUNE_CASE_SPEED + ENABLED(HAS_HOTEND))
-#define TUNE_CASE_BED  (TUNE_CASE_TEMP + ENABLED(HAS_HEATED_BED))
-#define TUNE_CASE_FAN  (TUNE_CASE_BED + ENABLED(HAS_FAN))
+#define TUNE_CASE_BED (TUNE_CASE_TEMP + ENABLED(HAS_HEATED_BED))
+#define TUNE_CASE_FAN (TUNE_CASE_BED + ENABLED(HAS_FAN))
 #define TUNE_CASE_ZOFF (TUNE_CASE_FAN + ENABLED(HAS_ZOFFSET_ITEM))
 #define TUNE_CASE_TOTAL TUNE_CASE_ZOFF
-
+//107011 -20210910 激光模式
+#if HAS_CUTTER
+#define MOTION_LASER_CASE_RATE 1
+#define MOTION_LASER_CASE_ACCEL 2
+#define MOTION_LASER_CASE_JERK (MOTION_LASER_CASE_ACCEL + ENABLED(HAS_CLASSIC_JERK))
+//#define MOTION_LASER_CASE_STEPS  (MOTION_LASER_CASE_JERK + 1)
+#define MOTION_LASER_CASE_TOTAL MOTION_LASER_CASE_JERK //MOTION_CASE_STEPS
+#define CONTROL_LASER_CASE_MOVE 1
+#define CONTROL_LASER_CASE_SAVE 2
+#define CONTROL_LASER_CASE_LOAD (CONTROL_LASER_CASE_SAVE + ENABLED(EEPROM_SETTINGS))
+#define CONTROL_LASER_CASE_FDM (CONTROL_LASER_CASE_LOAD + 1)
+#define CONTROL_LASER_CASE_RESET (CONTROL_LASER_CASE_FDM + ENABLED(EEPROM_SETTINGS))
+#define CONTROL_LASER_CASE_INFO (CONTROL_LASER_CASE_RESET + 1)
+#define CONTROL_LASER_CASE_TOTAL CONTROL_LASER_CASE_INFO
+#define PREPARE_LASER_CASE_MOVE 1
+#define PREPARE_LASER_CASE_DISA 2
+#define PREPARE_LASER_CASE_HOME 3
+//#define PREPARE_LASER_CASE_ORIGIN   4
+//#define PREPARE_CASE_ZOFF (PREPARE_CASE_HOME + ENABLED(HAS_ZOFFSET_ITEM))
+//#define PREPARE_CASE_PLA  (PREPARE_CASE_ZOFF + ENABLED(HAS_HOTEND))
+//#define PREPARE_CASE_ABS  (PREPARE_CASE_PLA + ENABLED(HAS_HOTEND))
+//#define PREPARE_CASE_COOL (PREPARE_CASE_ABS + EITHER(HAS_HOTEND, HAS_HEATED_BED))
+#define PREPARE_LASER_CASE_LANG (PREPARE_LASER_CASE_HOME + 1)
+#define PREPARE_LASER_CASE_TOTAL PREPARE_LASER_CASE_LANG
+#define TUNE_CASE_LASER_XMOVE 1
+#define TUNE_CASE_LASER_YMOVE (TUNE_CASE_LASER_XMOVE + 1)
+#define TUNE_CASE_LASER_ZMOVE (TUNE_CASE_LASER_YMOVE + 1)
+#define TUNE_CASE_LASER_XYAREA (TUNE_CASE_LASER_ZMOVE + 1)
+#define TUNE_CASE_LASER_TOTAL TUNE_CASE_LASER_XYAREA
+#endif //end HAS_CUTTER 107011
 #define TEMP_CASE_TEMP (0 + ENABLED(HAS_HOTEND))
-#define TEMP_CASE_BED  (TEMP_CASE_TEMP + ENABLED(HAS_HEATED_BED))
-#define TEMP_CASE_FAN  (TEMP_CASE_BED + ENABLED(HAS_FAN))
-#define TEMP_CASE_PLA  (TEMP_CASE_FAN + ENABLED(HAS_HOTEND))
-#define TEMP_CASE_ABS  (TEMP_CASE_PLA + ENABLED(HAS_HOTEND))
+#define TEMP_CASE_BED (TEMP_CASE_TEMP + ENABLED(HAS_HEATED_BED))
+#define TEMP_CASE_FAN (TEMP_CASE_BED + ENABLED(HAS_FAN))
+#define TEMP_CASE_PLA (TEMP_CASE_FAN + ENABLED(HAS_HOTEND))
+#define TEMP_CASE_ABS (TEMP_CASE_PLA + ENABLED(HAS_HOTEND))
 #define TEMP_CASE_TOTAL TEMP_CASE_ABS
-
 #define PREHEAT_CASE_TEMP (0 + ENABLED(HAS_HOTEND))
-#define PREHEAT_CASE_BED  (PREHEAT_CASE_TEMP + ENABLED(HAS_HEATED_BED))
-#define PREHEAT_CASE_FAN  (PREHEAT_CASE_BED + ENABLED(HAS_FAN))
+#define PREHEAT_CASE_BED (PREHEAT_CASE_TEMP + ENABLED(HAS_HEATED_BED))
+#define PREHEAT_CASE_FAN (PREHEAT_CASE_BED + ENABLED(HAS_FAN))
 #define PREHEAT_CASE_SAVE (PREHEAT_CASE_FAN + ENABLED(EEPROM_SETTINGS))
 #define PREHEAT_CASE_TOTAL PREHEAT_CASE_SAVE
 
@@ -645,30 +755,31 @@ static void pause_resume_feedstock(uint16_t _distance,uint16_t _feedRate)
   gcode.process_subcommands_now(cmd);
   memset(cmd,0,sizeof(cmd));
      // Resume the feedrate
-  sprintf_P(cmd, PSTR("G1F%d"), MMS_TO_MMM(feedrate_mm_s));
+  sprintf_P(cmd, PSTR("G1F%.2f"), MMS_TO_MMM(feedrate_mm_s));
   gcode.process_subcommands_now(cmd);
 }
 //
 // Draw Menus
 //
-
-void DWIN_Draw_Label(const uint16_t y, char *string) {
+void DWIN_Draw_Label(const uint16_t y, char *string)
+{
   DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, LBLX, y, string);
 }
-void DWIN_Draw_Label(const uint16_t y, const __FlashStringHelper *title) {
-  DWIN_Draw_Label(y, (char*)title);
+void DWIN_Draw_Label(const uint16_t y, const __FlashStringHelper *title)
+{
+  DWIN_Draw_Label(y, (char *)title);
 }
-
-void draw_move_en(const uint16_t line) {
-  #ifdef USE_STRING_TITLES
-    DWIN_Draw_Label(line, F("Move"));
-  #else
-    DWIN_Frame_AreaCopy(1, 69, 61, 102, 71, LBLX, line); // "Move"
-  #endif
+void draw_move_en(const uint16_t line)
+{
+#ifdef USE_STRING_TITLES
+  DWIN_Draw_Label(line, F("Move"));
+#else
+  DWIN_Frame_AreaCopy(1, 69, 61, 102, 71, LBLX, line);          // "Move"
+#endif
 }
-
 void DWIN_Frame_TitleCopy(uint8_t id, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) { DWIN_Frame_AreaCopy(id, x1, y1, x2, y2, 14, 8); }
-void Item_Prepare_Move(const uint8_t row) {
+void Item_Prepare_Move(const uint8_t row)
+{
   if (HMI_IsChinese())
     DWIN_Frame_AreaCopy(1, 159, 70, 200, 84, LBLX, MBASE(row));
   else
@@ -676,146 +787,217 @@ void Item_Prepare_Move(const uint8_t row) {
   Draw_Menu_Line(row, ICON_Axis);
   Draw_More_Icon(row);
 }
-
-void Item_Prepare_Disable(const uint8_t row) {
+void Item_Prepare_Disable(const uint8_t row)
+{
   if (HMI_IsChinese())
-    DWIN_Frame_AreaCopy(1, 204, 70, 259, 82, LBLX, MBASE(row));
-  else 
+    DWIN_Frame_AreaCopy(1, 204, 70, 261, 82, LBLX, MBASE(row));
+  else
   {
-    #ifdef USE_STRING_TITLES
-      DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_DISABLE_STEPPERS));
-    #else
-      DWIN_Frame_AreaCopy(1, 103, 59, 200, 74, LBLX, MBASE(row)); // "Disable Stepper"
-    #endif
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_DISABLE_STEPPERS));
+#else
+    DWIN_Frame_AreaCopy(1, 103, 60, 201, 74, LBLX, MBASE(row)); // "Disable Stepper"
+#endif
   }
   Draw_Menu_Line(row, ICON_CloseMotor);
 }
-
-void Item_Prepare_Home(const uint8_t row) {
-  if (HMI_IsChinese())
-    DWIN_Frame_AreaCopy(1, 0, 89, 41, 101, LBLX, MBASE(row));
-  else 
+void Item_Prepare_Home(const uint8_t row)
+{
+  if (HMI_IsChinese()){
+    if(laser_device.is_laser_device()){
+      //DWIN_Frame_AreaCopy(1, 0, 89, 41, 101, LBLX, MBASE(row));
+      //DWIN_ICON_Show(ICON, LABEL_AUTOHOME, LBLX, MBASE(row)-8);
+      DWIN_Frame_AreaCopy(1, 208, 53, 236,67, LBLX, MBASE(row));
+    }else{
+      DWIN_Frame_AreaCopy(1, 0, 89, 41, 101, LBLX, MBASE(row));
+    }
+  }else
   {
-    #ifdef USE_STRING_TITLES
-      DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_AUTO_HOME));
-    #else
-      DWIN_Frame_AreaCopy(1, 202, 61, 271, 71, LBLX, MBASE(row)); // "Auto Home"
-    #endif
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_AUTO_HOME));
+#else
+    DWIN_Frame_AreaCopy(1, 202, 61, 271, 71, LBLX, MBASE(row)); // "Auto Home"
+#endif
   }
   Draw_Menu_Line(row, ICON_Homing);
 }
-
+// 107011 -20210922
+void Item_Laser_Prepare_Origin(const uint8_t row)
+{
+  // if (HMI_IsChinese())
+  //   DWIN_Frame_AreaCopy(1, 0, 89, 41, 101, LBLX, MBASE(row));
+  // else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_AUTO_HOME));
+#else
+    DWIN_Frame_AreaCopy(1, 202, 61, 271, 71, LBLX, MBASE(row)); // "Auto Home"
+#endif
+  }
+  Draw_Menu_Line(row, ICON_SetOrigin);
+}
 #if HAS_ZOFFSET_ITEM
-
-  void Item_Prepare_Offset(const uint8_t row) {
-    if (HMI_IsChinese()) {
-      #if HAS_BED_PROBE
-        DWIN_Frame_AreaCopy(1, 174, 164, 223, 177, LBLX, MBASE(row));
-        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 2, 2, 202, MBASE(row), probe.offset.z * 100);
-      #else
-        DWIN_Frame_AreaCopy(1, 43, 89, 98, 101, LBLX, MBASE(row));
-      #endif
-    }
-    else {
-      #if HAS_BED_PROBE
-        #ifdef USE_STRING_TITLES
-          DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_ZPROBE_ZOFFSET));
-        #else
-          DWIN_Frame_AreaCopy(1, 93, 179, 141, 189, LBLX, MBASE(row));    // "Z-Offset"
-        #endif
-        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 2, 2, 202, MBASE(row), probe.offset.z * 100);
-      #else
-        #ifdef USE_STRING_TITLES
-          DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_SET_HOME_OFFSETS));
-        #else
-          DWIN_Frame_AreaCopy(1, 1, 76, 106, 86, LBLX, MBASE(row));       // "Set home offsets"
-        #endif
-      #endif
-    }
-    Draw_Menu_Line(row, ICON_SetHome);
-  }
-
+void Item_Prepare_Offset(const uint8_t row)
+{
+  if (HMI_IsChinese())
+  {
+#if HAS_BED_PROBE
+    DWIN_Frame_AreaCopy(1, 174, 164, 223, 177, LBLX, MBASE(row));
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 2, 2, 202, MBASE(row), probe.offset.z * 100);
+#else
+    DWIN_Frame_AreaCopy(1, 43, 89, 98, 101, LBLX, MBASE(row));
 #endif
-
+  }
+  else
+  {
+#if HAS_BED_PROBE
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_ZPROBE_ZOFFSET));
+#else
+    DWIN_Frame_AreaCopy(1, 93, 179, 141, 189, LBLX, MBASE(row)); // "Z-Offset"
+#endif
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 2, 2, 202, MBASE(row), probe.offset.z * 100);
+#else
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_SET_HOME_OFFSETS));
+#else
+    DWIN_Frame_AreaCopy(1, 1, 76, 106, 86, LBLX, MBASE(row)); // "Set home offsets"
+#endif
+#endif
+  }
+  Draw_Menu_Line(row, ICON_SetHome);
+}
+#endif
 #if HAS_HOTEND
-  void Item_Prepare_PLA(const uint8_t row) {
-    if (HMI_IsChinese()) {
-      DWIN_Frame_AreaCopy(1, 100, 89, 151, 101, LBLX, MBASE(row));
-    }
-    else {
-      #ifdef USE_STRING_TITLES
-        DWIN_Draw_Label(MBASE(row), F("Preheat " PREHEAT_1_LABEL));
-      #else
-        DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(row));       // "Preheat"
-        DWIN_Frame_AreaCopy(1, 157, 76, 181, 86, LBLX + 52, MBASE(row));  // "PLA"
-      #endif
-    }
-    Draw_Menu_Line(row, ICON_PLAPreheat);
+void Item_Prepare_PLA(const uint8_t row)
+{
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_AreaCopy(1, 100, 89, 151, 101, LBLX, MBASE(row));
   }
-
-  void Item_Prepare_ABS(const uint8_t row) {
-    if (HMI_IsChinese()) {
-      DWIN_Frame_AreaCopy(1, 180, 89, 233, 100, LBLX, MBASE(row));
-    }
-    else {
-      #ifdef USE_STRING_TITLES
-        DWIN_Draw_Label(MBASE(row), F("Preheat " PREHEAT_2_LABEL));
-      #else
-        DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(row));       // "Preheat"
-        DWIN_Frame_AreaCopy(1, 172, 76, 198, 86, LBLX + 52, MBASE(row));  // "ABS"
-      #endif
-    }
-    Draw_Menu_Line(row, ICON_ABSPreheat);
-  }
+  else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), F("Preheat " PREHEAT_1_LABEL));
+#else
+    DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(row));      // "Preheat"
+    DWIN_Frame_AreaCopy(1, 157, 76, 181, 86, LBLX + 52, MBASE(row)); // "PLA"
 #endif
-
+  }
+  Draw_Menu_Line(row, ICON_PLAPreheat);
+}
+void Item_Prepare_ABS(const uint8_t row)
+{
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_AreaCopy(1, 180, 89, 233, 100, LBLX, MBASE(row));
+  }
+  else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), F("Preheat " PREHEAT_2_LABEL));
+#else
+    DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(row));      // "Preheat"
+    DWIN_Frame_AreaCopy(1, 172, 76, 198, 86, LBLX + 52, MBASE(row)); // "ABS"
+#endif
+  }
+  Draw_Menu_Line(row, ICON_ABSPreheat);
+}
+#endif
 #if HAS_PREHEAT
-  void Item_Prepare_Cool(const uint8_t row) {
-    if (HMI_IsChinese())
-      DWIN_Frame_AreaCopy(1,   1, 104,  56, 117, LBLX, MBASE(row));
-    else {
-      #ifdef USE_STRING_TITLES
-        DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_COOLDOWN));
-      #else
-        DWIN_Frame_AreaCopy(1, 200,  76, 264,  86, LBLX, MBASE(row));      // "Cooldown"
-      #endif
-    }
-    Draw_Menu_Line(row, ICON_Cool);
-  }
+void Item_Prepare_Cool(const uint8_t row)
+{
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 1, 104, 56, 117, LBLX, MBASE(row));
+  else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), GET_TEXT_F(MSG_COOLDOWN));
+#else
+    DWIN_Frame_AreaCopy(1, 200, 76, 264, 86, LBLX, MBASE(row));      // "Cooldown"
 #endif
-
-void Item_Prepare_Lang(const uint8_t row) {
+  }
+  Draw_Menu_Line(row, ICON_Cool);
+}
+#endif
+void Item_Prepare_Lang(const uint8_t row)
+{
   if (HMI_IsChinese())
     DWIN_Frame_AreaCopy(1, 239, 134, 266, 146, LBLX, MBASE(row));
-  else {
-    #ifdef USE_STRING_TITLES
-      DWIN_Draw_Label(MBASE(row), F("UI Language"));
-    #else
-      DWIN_Frame_AreaCopy(1, 0, 194, 121, 207, LBLX, MBASE(row)); // "Language selection"
-    #endif
+  else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(MBASE(row), F("UI Language"));
+#else
+    DWIN_Frame_AreaCopy(1, 0, 194, 121, 207, LBLX, MBASE(row)); // "Language selection"
+#endif
   }
   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 226, MBASE(row), HMI_IsChinese() ? F("CN") : F("EN"));
   Draw_Menu_Icon(row, ICON_Language);
 }
-
-void Draw_Prepare_Menu() {
+//107011 -20210910 激光模式下的准备界面
+#if HAS_CUTTER
+//test_current 警告
+void Draw_Warning()
+{
   Clear_Main_Window();
-
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_TitleCopy(1, 133, 1, 160, 13);
+    DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 150, MBASE(30), F("OK"));
+    DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 150, MBASE(33), F("Cancel"));
+  }
+  else
+  {
+    DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 150, MBASE(30), F("OK"));
+    DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 150, MBASE(33), F("Cancel"));
+  }
+}
+void Draw_Laser_Prepare_Menu()
+{
+  Clear_Main_Window();
   const int16_t scroll = MROWS - index_prepare; // Scrolled-up lines
-  #define PSCROL(L) (scroll + (L))
-  #define PVISI(L)  WITHIN(PSCROL(L), 0, MROWS)
-
-  if (HMI_IsChinese()) {
-    DWIN_Frame_TitleCopy(1, 133, 1, 160, 13);   // "Prepare"
+#define PSCROL(L) (scroll + (L))
+#define PVISI(L) WITHIN(PSCROL(L), 0, MROWS)
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_TitleCopy(1, 133, 1, 160, 13); // "Prepare"
   }
-  else {
-    #ifdef USE_STRING_HEADINGS
-      Draw_Title(GET_TEXT_F(MSG_PREPARE));
-    #else
-      DWIN_Frame_TitleCopy(1, 178, 2, 229, 14); // "Prepare"
-    #endif
+  else
+  {
+#ifdef USE_STRING_HEADINGS
+    Draw_Title(GET_TEXT_F(MSG_PREPARE));
+#else
+    DWIN_Frame_TitleCopy(1, 178, 2, 229, 14);                        // "Prepare"
+#endif
   }
-
+  if (PVISI(0)) Draw_Back_First(select_prepare.now == 0);                         // < Back
+  if (PVISI(PREPARE_LASER_CASE_MOVE)) Item_Prepare_Move(PSCROL(PREPARE_LASER_CASE_MOVE));     // Move >
+  if (PVISI(PREPARE_LASER_CASE_DISA)) Item_Prepare_Disable(PSCROL(PREPARE_LASER_CASE_DISA));  // Disable Stepper
+  if (PVISI(PREPARE_LASER_CASE_HOME)) Item_Prepare_Home(PSCROL(PREPARE_LASER_CASE_HOME));     // Auto Home
+  //if (PVISI(PREPARE_LASER_CASE_ORIGIN)) Item_Laser_Prepare_Origin(PSCROL(PREPARE_LASER_CASE_ORIGIN));     // Auto Home
+  if (PVISI(PREPARE_LASER_CASE_LANG)) Item_Prepare_Lang(PSCROL(PREPARE_LASER_CASE_LANG));     // Language CN/EN
+  if (select_prepare.now) Draw_Menu_Cursor(PSCROL(select_prepare.now));
+}
+#endif //#if HAS_CUTTER
+void Draw_Prepare_Menu()
+{
+  Clear_Main_Window();
+  const int16_t scroll = MROWS - index_prepare; // Scrolled-up lines
+#define PSCROL(L) (scroll + (L))
+#define PVISI(L) WITHIN(PSCROL(L), 0, MROWS)
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_TitleCopy(1, 133, 1, 160, 13); // "Prepare"
+  }
+  else
+  {
+#ifdef USE_STRING_HEADINGS
+    Draw_Title(GET_TEXT_F(MSG_PREPARE));
+#else
+    DWIN_Frame_TitleCopy(1, 178, 2, 229, 14);                   // "Prepare"
+#endif
+  }
   if (PVISI(0)) Draw_Back_First(select_prepare.now == 0);                         // < Back
   if (PVISI(PREPARE_CASE_MOVE)) Item_Prepare_Move(PSCROL(PREPARE_CASE_MOVE));     // Move >
   if (PVISI(PREPARE_CASE_DISA)) Item_Prepare_Disable(PSCROL(PREPARE_CASE_DISA));  // Disable Stepper
@@ -831,26 +1013,38 @@ void Draw_Prepare_Menu() {
     if (PVISI(PREPARE_CASE_COOL)) Item_Prepare_Cool(PSCROL(PREPARE_CASE_COOL));   // Cooldown
   #endif
   if (PVISI(PREPARE_CASE_LANG)) Item_Prepare_Lang(PSCROL(PREPARE_CASE_LANG));     // Language CN/EN
-
   if (select_prepare.now) Draw_Menu_Cursor(PSCROL(select_prepare.now));
 }
-
-void Item_Control_Info(const uint16_t line) {
+void Item_Control_Info(const uint16_t line)
+{
   if (HMI_IsChinese())
-    DWIN_Frame_AreaCopy(1, 231, 102, 258, 116, LBLX, line);  //rock_20210726
-  else 
+    DWIN_Frame_AreaCopy(1, 231, 102, 258, 116, LBLX, line); //rock_20210726
+  else
   {
-    #ifdef USE_STRING_TITLES
-      DWIN_Draw_Label(line, F("Info"));
-    #else
-      DWIN_Frame_AreaCopy(1, 0, 104, 24, 114, LBLX, line);
-    #endif
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(line, F("Info"));
+#else
+    DWIN_Frame_AreaCopy(1, 0, 104, 24, 114, LBLX, line);
+#endif
   }
 }
-
-void Draw_Control_Menu() {
+void Item_Control_ResumeEEPROM(const uint16_t line)
+{
+  if (HMI_IsChinese())
+    DWIN_Frame_AreaCopy(1, 1, 118, 56, 131, LBLX, line); // Reset Configuration
+  else
+  {
+#ifdef USE_STRING_TITLES
+    DWIN_Draw_Label(line, F("Reset Configuration"));
+#else
+    DWIN_Frame_AreaCopy(1, 59, 104, 93, 114, LBLX, line);       // "Reset"
+    DWIN_Frame_AreaCopy(1, 182, 89, 268, 101, LBLX + 37, line); // "Configuration"
+#endif
+  }
+}
+void Draw_Control_Menu()
+{
   Clear_Main_Window();
-
   #if CONTROL_CASE_TOTAL >= 6
     const int16_t scroll = MROWS - index_control; // Scrolled-up lines
     #define CSCROL(L) (scroll + (L))
@@ -859,20 +1053,20 @@ void Draw_Control_Menu() {
   #endif
   #define CLINE(L)  MBASE(CSCROL(L))
   #define CVISI(L)  WITHIN(CSCROL(L), 0, MROWS)
-
   if (CVISI(0)) Draw_Back_First(select_control.now == 0);                         // < Back
-
   if (HMI_IsChinese()) {
     DWIN_Frame_TitleCopy(1, 103, 1, 130, 14);                                     // "Control"
-
     DWIN_Frame_AreaCopy(1,  57, 104,  84, 116, LBLX, CLINE(CONTROL_CASE_TEMP));   // Temperature >
     DWIN_Frame_AreaCopy(1,  87, 104, 114, 116, LBLX, CLINE(CONTROL_CASE_MOVE));   // Motion >
-
     #if ENABLED(EEPROM_SETTINGS)
       DWIN_Frame_AreaCopy(1, 117, 104, 172, 116, LBLX, CLINE(CONTROL_CASE_SAVE));   // Store Configuration  
       DWIN_Frame_AreaCopy(1, 174, 103, 229, 116, LBLX, CLINE(CONTROL_CASE_LOAD));   // Read Configuration
-      DWIN_Frame_AreaCopy(1,   1, 118,  56, 131, LBLX, CLINE(CONTROL_CASE_RESET));  // Reset Configuration
+      if (CVISI(CONTROL_CASE_RESET)) DWIN_Frame_AreaCopy(1,   1, 118,  56, 131, LBLX, CLINE(CONTROL_CASE_RESET));  // Reset Configuration //107011 -20211009
     #endif
+    //DWIN_ICON_Show(ICON, ICON_SwLaser, LBLX, CLINE(CONTROL_CASE_SW_LASER));// 切换融积打印
+    //DWIN_Frame_AreaCopy(1, 2, 52, 87, 67, LBLX, CLINE(CONTROL_CASE_SW_LASER)); // 切换激光雕刻
+    DWIN_Frame_AreaCopy(1, 2, 52, 59, 67, LBLX, CLINE(CONTROL_CASE_SW_LASER)); // 切换激光
+    DWIN_Frame_AreaCopy(1, 178,52, 207,67, LBLX+57, CLINE(CONTROL_CASE_SW_LASER)); // 雕刻
   }
   else {
     #ifdef USE_STRING_HEADINGS
@@ -892,30 +1086,33 @@ void Draw_Control_Menu() {
       if (CVISI(CONTROL_CASE_TEMP)) DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, LBLX, CLINE(CONTROL_CASE_TEMP));           // Temperature >
       if (CVISI(CONTROL_CASE_MOVE)) DWIN_Frame_AreaCopy(1, 84, 89, 128,  99, LBLX, CLINE(CONTROL_CASE_MOVE));           // Motion >
       #if ENABLED(EEPROM_SETTINGS)
-        if (CVISI(CONTROL_CASE_SAVE)) DWIN_Frame_AreaCopy(1, 147,  89, 268, 101, LBLX  , CLINE(CONTROL_CASE_SAVE));  // "Store Configuration" rock_20210923
+        //if (CVISI(CONTROL_CASE_SAVE)) DWIN_Frame_AreaCopy(1, 147,  89, 268, 101, LBLX  , CLINE(CONTROL_CASE_SAVE));  // "Store Configuration" rock_20210923
+        if (CVISI(CONTROL_CASE_SAVE)) DWIN_Frame_AreaCopy(1, 148,88, 270,101, LBLX, CLINE(CONTROL_CASE_SAVE));  // "Store Configuration" 107011 -20211009 解决显示不全
         if (CVISI(CONTROL_CASE_LOAD))  
         {
-          DWIN_Frame_AreaCopy(1,  26, 104,  57, 114, LBLX     , CLINE(CONTROL_CASE_LOAD));      // "Read"
-          DWIN_Frame_AreaCopy(1, 182,  89, 268, 101, LBLX + 34, CLINE(CONTROL_CASE_LOAD));      // "Configuration"
+          DWIN_Frame_AreaCopy(1,  26, 104,  57, 114, LBLX     , CLINE(CONTROL_CASE_LOAD));  // "Read"
+          DWIN_Frame_AreaCopy(1, 182,  89, 268, 101, LBLX + 34, CLINE(CONTROL_CASE_LOAD));  // "Configuration"
         }
-        if (CVISI(CONTROL_CASE_RESET)) 
-        {
+        if (CVISI(CONTROL_CASE_RESET)) { // 107011-20211009 
           DWIN_Frame_AreaCopy(1,  59, 104,  93, 114, LBLX     , CLINE(CONTROL_CASE_RESET)); // "Reset"
           DWIN_Frame_AreaCopy(1, 182,  89, 268, 101, LBLX + 37, CLINE(CONTROL_CASE_RESET)); // "Configuration"
         }
       #endif
     #endif
+    
+    //DWIN_Draw_Label(CLINE(CONTROL_CASE_SW_LASER), F("Switched Laser printing"));DWIN_Frame_AreaCopy(1, 86,351, 234,367, LBLX, CLINE(CONTROL_LASER_CASE_FDM));
+    //DWIN_Frame_AreaCopy(1, 86,351, 264,367, LBLX, CLINE(CONTROL_CASE_SW_LASER));
+    DWIN_Frame_AreaCopy(1, 86, 351, 184, 367, LBLX, CLINE(CONTROL_CASE_SW_LASER)); // Switched Laser 
+    DWIN_Frame_AreaCopy(1, 203, 366, 271, 381, LBLX+98, CLINE(CONTROL_CASE_SW_LASER)); //engraving
   }
-/*
+  /*
   if (CVISI(CONTROL_CASE_ADVSET)) {
     //DWIN_Draw_Label(CLINE(CONTROL_CASE_ADVSET), GET_TEXT_F(MSG_ADVANCED_SETTINGS));  // Advanced Settings
   }
 */
   if (CVISI(CONTROL_CASE_INFO)) Item_Control_Info(CLINE(CONTROL_CASE_INFO));
-
   if (select_control.now && CVISI(select_control.now))
     Draw_Menu_Cursor(CSCROL(select_control.now));
-
   // Draw icons and lines
   #define _TEMP_ICON(N, I, M) do { \
     if (CVISI(N)) { \
@@ -925,83 +1122,170 @@ void Draw_Control_Menu() {
       } \
     } \
   } while(0)
-
   _TEMP_ICON(CONTROL_CASE_TEMP, ICON_Temperature, true);
   _TEMP_ICON(CONTROL_CASE_MOVE, ICON_Motion, true);
-
-  #if ENABLED(EEPROM_SETTINGS)
-    _TEMP_ICON(CONTROL_CASE_SAVE, ICON_WriteEEPROM, false);
-    _TEMP_ICON(CONTROL_CASE_LOAD, ICON_ReadEEPROM, false);
-    _TEMP_ICON(CONTROL_CASE_RESET, ICON_ResumeEEPROM, false);
-  #endif
-
+#if ENABLED(EEPROM_SETTINGS)
+  _TEMP_ICON(CONTROL_CASE_SAVE, ICON_WriteEEPROM, false);
+  _TEMP_ICON(CONTROL_CASE_LOAD, ICON_ReadEEPROM, false);
+  _TEMP_ICON(CONTROL_CASE_RESET, ICON_ResumeEEPROM, false);
+#endif
+  _TEMP_ICON(CONTROL_CASE_SW_LASER, ICON_ControlLaser, false); // 107011 -20210924
   //_TEMP_ICON(CONTROL_CASE_ADVSET, ICON_AdvSet, true);  //rock_20210724
   _TEMP_ICON(CONTROL_CASE_INFO, ICON_Info, true);
 }
-
-void Draw_Tune_Menu() {
-  Clear_Main_Window();
-
-  if (HMI_IsChinese()) {
-    DWIN_Frame_AreaCopy(1, 73, 2, 100, 13, 14, 9);
-    DWIN_Frame_AreaCopy(1, 116, 164, 171, 176, LBLX, MBASE(TUNE_CASE_SPEED));
-    #if HAS_HOTEND
-      DWIN_Frame_AreaCopy(1, 1, 134, 56, 146, LBLX, MBASE(TUNE_CASE_TEMP));
-    #endif
-    #if HAS_HEATED_BED
-      DWIN_Frame_AreaCopy(1, 58, 134, 113, 146, LBLX, MBASE(TUNE_CASE_BED));
-    #endif
-    #if HAS_FAN
-      DWIN_Frame_AreaCopy(1, 115, 134, 172, 146, LBLX, MBASE(TUNE_CASE_FAN));
-    #endif
-    #if HAS_ZOFFSET_ITEM
-      DWIN_Frame_AreaCopy(1, 174, 164, 223, 177, LBLX, MBASE(TUNE_CASE_ZOFF));
-    #endif
-  }
-  else 
+//test_current
+//107011 -20210910 激光模式
+#if HAS_CUTTER
+  void Draw_Laser_Control_Menu()
   {
-    #ifdef USE_STRING_HEADINGS
+    Clear_Main_Window();
+    #if CONTROL_LASER_CASE_TOTAL >= 6
+      const int16_t scroll = MROWS - index_control; // Scrolled-up lines
+      #define CSCROL(L) (scroll + (L))
+    #else
+      #define CSCROL(L) (L)
+    #endif
+    #define CLINE(L)  MBASE(CSCROL(L))
+    #define CVISI(L)  WITHIN(CSCROL(L), 0, MROWS)
+    if (CVISI(0)) Draw_Back_First(select_control.now == 0);                         // < Back
+    if (HMI_IsChinese()) {
+        DWIN_Frame_TitleCopy(1, 103, 1, 130, 14);                                     // "Control"
+      #if ENABLED(EEPROM_SETTINGS)
+        DWIN_Frame_AreaCopy(1,  87, 104, 114, 116, LBLX, CLINE(CONTROL_LASER_CASE_MOVE));   // Motion >
+        DWIN_Frame_AreaCopy(1, 117, 104, 172, 116, LBLX, CLINE(CONTROL_LASER_CASE_SAVE));   // Store Configuration
+        DWIN_Frame_AreaCopy(1, 174, 103, 229, 116, LBLX, CLINE(CONTROL_LASER_CASE_LOAD));   // Read Configuration
+        DWIN_Frame_AreaCopy(1,   1, 118,  56, 131, LBLX, CLINE(CONTROL_LASER_CASE_RESET));  // Reset Configuration
+      #endif
+      //DWIN_ICON_Show(ICON, ICON_SwFdm, LBLX, CLINE(CONTROL_LASER_CASE_FDM));// 切换融积打印
+      DWIN_Frame_AreaCopy(1, 91, 52, 176, 67, LBLX, CLINE(CONTROL_LASER_CASE_FDM)); // 切换融积打印
+    }
+    else {
+        #ifdef USE_STRING_HEADINGS
+          Draw_Title(GET_TEXT_F(MSG_CONTROL));
+        #else
+          DWIN_Frame_TitleCopy(1, 128, 2, 176, 12);                                         // "Control"
+        #endif
+      #ifdef USE_STRING_TITLES
+        if (CVISI(CONTROL_LASER_CASE_MOVE)) DWIN_Draw_Label(CLINE(CONTROL_LASER_CASE_MOVE), GET_TEXT_F(MSG_MOTION));
+        #if ENABLED(EEPROM_SETTINGS)
+          if (CVISI(CONTROL_LASER_CASE_SAVE)) DWIN_Draw_Label(CLINE(CONTROL_LASER_CASE_SAVE), GET_TEXT_F(MSG_STORE_EEPROM));
+          if (CVISI(CONTROL_LASER_CASE_LOAD)) DWIN_Draw_Label(CLINE(CONTROL_LASER_CASE_LOAD), GET_TEXT_F(MSG_LOAD_EEPROM));
+          if (CVISI(CONTROL_LASER_CASE_RESET)) DWIN_Draw_Label(CLINE(CONTROL_LASER_CASE_RESET), GET_TEXT_F(MSG_RESTORE_DEFAULTS));
+        #endif
+      #else
+        if (CVISI(CONTROL_LASER_CASE_MOVE)) DWIN_Frame_AreaCopy(1, 84, 89, 128,  99, LBLX, CLINE(CONTROL_LASER_CASE_MOVE));           // Motion >
+        #if ENABLED(EEPROM_SETTINGS)
+          if (CVISI(CONTROL_LASER_CASE_SAVE)) DWIN_Frame_AreaCopy(1, 148,88, 270,101, LBLX, CLINE(CONTROL_LASER_CASE_SAVE));  // "Store Configuration"
+          if (CVISI(CONTROL_LASER_CASE_LOAD)) {
+            DWIN_Frame_AreaCopy(1,  26, 104,  57, 114, LBLX     , CLINE(CONTROL_LASER_CASE_LOAD));  // "Read"
+            DWIN_Frame_AreaCopy(1, 182,  89, 268, 101, LBLX + 34, CLINE(CONTROL_LASER_CASE_LOAD));  // "Configuration"
+          }
+          if (CVISI(CONTROL_LASER_CASE_RESET)) {
+            DWIN_Frame_AreaCopy(1,  59, 104,  93, 114, LBLX     , CLINE(CONTROL_LASER_CASE_RESET)); // "Reset"
+            DWIN_Frame_AreaCopy(1, 182,  89, 268, 101, LBLX + 37, CLINE(CONTROL_LASER_CASE_RESET)); // "Configuration"
+          }
+        #endif
+      #endif
+      //DWIN_Draw_Label(CLINE(CONTROL_LASER_CASE_FDM), F("Switched Laser printing"));
+      //DWIN_Frame_AreaCopy(1, 86,351, 234,367, LBLX, CLINE(CONTROL_LASER_CASE_FDM));
+          DWIN_Frame_AreaCopy(1, 86,351, 148,364, LBLX    , CLINE(CONTROL_LASER_CASE_FDM)); //Selected
+          DWIN_Frame_AreaCopy(1, 236,351, 264,364, LBLX + 62, CLINE(CONTROL_LASER_CASE_FDM)); //FDM
+          DWIN_Frame_AreaCopy(1, 184,351, 234,367, LBLX + 62+28+2, CLINE(CONTROL_LASER_CASE_FDM)); //Printing
+    }
+    /*
+      if (CVISI(CONTROL_CASE_ADVSET)) {
+        //DWIN_Draw_Label(CLINE(CONTROL_CASE_ADVSET), GET_TEXT_F(MSG_ADVANCED_SETTINGS));  // Advanced Settings
+      }
+    */
+    //if (CVISI(CONTROL_LASER_CASE_FDM))   
+    if (CVISI(CONTROL_LASER_CASE_INFO)) Item_Control_Info(CLINE(CONTROL_LASER_CASE_INFO));
+    if (select_control.now && CVISI(select_control.now))
+      Draw_Menu_Cursor(CSCROL(select_control.now));
+    // Draw icons and lines
+    #define _TEMP_ICON(N, I, M) do { \
+      if (CVISI(N)) { \
+        Draw_Menu_Line(CSCROL(N), I); \
+        if (M) { \
+          Draw_More_Icon(CSCROL(N)); \
+        } \
+      } \
+    } while(0)
+    _TEMP_ICON(CONTROL_LASER_CASE_MOVE, ICON_Motion, true);
+  #if ENABLED(EEPROM_SETTINGS)
+    _TEMP_ICON(CONTROL_LASER_CASE_SAVE, ICON_WriteEEPROM, false);
+    _TEMP_ICON(CONTROL_LASER_CASE_LOAD, ICON_ReadEEPROM, false);
+    _TEMP_ICON(CONTROL_LASER_CASE_RESET, ICON_ResumeEEPROM, false);
+  #endif
+    //_TEMP_ICON(CONTROL_CASE_ADVSET, ICON_AdvSet, true);  //rock_20210724
+    _TEMP_ICON(CONTROL_LASER_CASE_FDM, ICON_ControlFdm, true);
+    _TEMP_ICON(CONTROL_LASER_CASE_INFO, ICON_Info, true);
+
+    DWIN_UpdateLCD();
+  }
+#endif // #if HAS_CUTTER
+
+  void Draw_Tune_Menu()
+  {
+    Clear_Main_Window();
+    if (HMI_IsChinese())
+    {
+      DWIN_Frame_AreaCopy(1, 73, 2, 100, 13, 14, 9);
+      DWIN_Frame_AreaCopy(1, 116, 164, 171, 176, LBLX, MBASE(TUNE_CASE_SPEED));
+  #if HAS_HOTEND
+      DWIN_Frame_AreaCopy(1, 1, 134, 56, 146, LBLX, MBASE(TUNE_CASE_TEMP));
+  #endif
+  #if HAS_HEATED_BED
+      DWIN_Frame_AreaCopy(1, 58, 134, 113, 146, LBLX, MBASE(TUNE_CASE_BED));
+  #endif
+  #if HAS_FAN
+      DWIN_Frame_AreaCopy(1, 115, 134, 172, 146, LBLX, MBASE(TUNE_CASE_FAN));
+  #endif
+  #if HAS_ZOFFSET_ITEM
+      DWIN_Frame_AreaCopy(1, 174, 164, 223, 177, LBLX, MBASE(TUNE_CASE_ZOFF));
+  #endif
+    }
+    else
+    {
+  #ifdef USE_STRING_HEADINGS
       Draw_Title(GET_TEXT_F(MSG_TUNE));
-    #else
+  #else
       DWIN_Frame_AreaCopy(1, 94, 2, 126, 12, 14, 9);
-    #endif
-    #ifdef USE_STRING_TITLES
+  #endif
+  #ifdef USE_STRING_TITLES
       DWIN_Draw_Label(MBASE(TUNE_CASE_SPEED), GET_TEXT_F(MSG_SPEED));
-      #if HAS_HOTEND
-        DWIN_Draw_Label(MBASE(TUNE_CASE_TEMP), GET_TEXT_F(MSG_UBL_SET_TEMP_HOTEND));
-      #endif
-      #if HAS_HEATED_BED
-        DWIN_Draw_Label(MBASE(TUNE_CASE_BED), GET_TEXT_F(MSG_UBL_SET_TEMP_BED));
-      #endif
-      #if HAS_FAN
-        DWIN_Draw_Label(MBASE(TUNE_CASE_FAN), GET_TEXT_F(MSG_FAN_SPEED));
-      #endif
+  #if HAS_HOTEND
+      DWIN_Draw_Label(MBASE(TUNE_CASE_TEMP), GET_TEXT_F(MSG_UBL_SET_TEMP_HOTEND));
+  #endif
+  #if HAS_HEATED_BED
+      DWIN_Draw_Label(MBASE(TUNE_CASE_BED), GET_TEXT_F(MSG_UBL_SET_TEMP_BED));
+  #endif
+  #if HAS_FAN
+      DWIN_Draw_Label(MBASE(TUNE_CASE_FAN), GET_TEXT_F(MSG_FAN_SPEED));
+  #endif
       DWIN_Draw_Label(MBASE(TUNE_CASE_ZOFF), GET_TEXT_F(MSG_ZPROBE_ZOFFSET));
-    #else
-      DWIN_Frame_AreaCopy(1, 1, 179, 92, 192, LBLX, MBASE(TUNE_CASE_SPEED));      // Print speed
-      #if HAS_HOTEND
-        DWIN_Frame_AreaCopy(1, 197, 104, 240, 114, LBLX, MBASE(TUNE_CASE_TEMP));  // Hotend... rock_20210907
-        DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 44, MBASE(TUNE_CASE_TEMP)); // ...Temperature
-      #endif
-      #if HAS_HEATED_BED
-        DWIN_Frame_AreaCopy(1, 240, 104, 264, 114, LBLX, MBASE(TUNE_CASE_BED));   // Bed...
-        DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 27, MBASE(TUNE_CASE_BED));  // ...Temperature
-      #endif
-      #if HAS_FAN
-        DWIN_Frame_AreaCopy(1, 0, 119, 64, 132, LBLX, MBASE(TUNE_CASE_FAN));      // Fan speed
-      #endif
-      #if HAS_ZOFFSET_ITEM
-        DWIN_Frame_AreaCopy(1, 93, 179, 141, 189, LBLX, MBASE(TUNE_CASE_ZOFF));   // Z-offset
-      #endif
-    #endif
-   }
+  #else
+      DWIN_Frame_AreaCopy(1, 1, 179, 92, 192, LBLX, MBASE(TUNE_CASE_SPEED));    // Print speed
+  #if HAS_HOTEND
+      DWIN_Frame_AreaCopy(1, 197, 104, 240, 114, LBLX, MBASE(TUNE_CASE_TEMP));  // Hotend... rock_20210907
+      DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 44, MBASE(TUNE_CASE_TEMP)); // ...Temperature
+  #endif
+  #if HAS_HEATED_BED
+      DWIN_Frame_AreaCopy(1, 240, 104, 264, 114, LBLX, MBASE(TUNE_CASE_BED));   // Bed...
+      DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 27, MBASE(TUNE_CASE_BED));  // ...Temperature
+  #endif
+  #if HAS_FAN
+      DWIN_Frame_AreaCopy(1, 0, 119, 64, 132, LBLX, MBASE(TUNE_CASE_FAN));      // Fan speed
+  #endif
+  #if HAS_ZOFFSET_ITEM
+      DWIN_Frame_AreaCopy(1, 93, 179, 141, 189, LBLX, MBASE(TUNE_CASE_ZOFF));   // Z-offset
+  #endif
+  #endif
+    }
     //显示数据
-  Draw_Back_First(select_tune.now == 0);
-  if (select_tune.now) Draw_Menu_Cursor(select_tune.now);
-
-  Draw_Menu_Line(TUNE_CASE_SPEED, ICON_Speed);
-  DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_SPEED), feedrate_percentage);
-
+    Draw_Back_First(select_tune.now == 0);
+    if (select_tune.now) Draw_Menu_Cursor(select_tune.now);
+    Draw_Menu_Line(TUNE_CASE_SPEED, ICON_Speed);
+    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_SPEED), feedrate_percentage);
   #if HAS_HOTEND
     Draw_Menu_Line(TUNE_CASE_TEMP, ICON_HotendTemp);
     DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_TEMP), thermalManager.degTargetHotend(0));
@@ -1018,52 +1302,242 @@ void Draw_Tune_Menu() {
     Draw_Menu_Line(TUNE_CASE_ZOFF, ICON_Zoffset);
     DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 2, 2, 202, MBASE(TUNE_CASE_ZOFF), BABY_Z_VAR * 100);
   #endif
-}
+  }
 
-void draw_max_en(const uint16_t line) {
-  DWIN_Frame_AreaCopy(1, 245, 119, 271, 130, LBLX, line);   // "Max"
+
+void draw_max_en(const uint16_t line)
+{
+  DWIN_Frame_AreaCopy(1, 245, 119, 271, 130, LBLX, line); // "Max"
 }
-void draw_max_accel_en(const uint16_t line) {
+void draw_max_accel_en(const uint16_t line)
+{
   draw_max_en(line);
   DWIN_Frame_AreaCopy(1, 1, 135, 79, 145, LBLX + 30, line); // "Acceleration" rock_20210919
 }
-void draw_speed_en(const uint16_t inset, const uint16_t line) 
+void draw_speed_en(const uint16_t inset, const uint16_t line)
 {
-  DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 30, line); // "Speed"
+  //DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 30, line); // "Speed" // 107011 -20210927
+  DWIN_Frame_AreaCopy(1, 184, 119, 226, 133, LBLX + 30, line); // "Speed"
 }
-void draw_jerk_en(const uint16_t line) {
+void draw_jerk_en(const uint16_t line)
+{
   DWIN_Frame_AreaCopy(1, 64, 119, 106, 129, LBLX + 30, line); // "Jerk"
 }
 void draw_steps_per_mm(const uint16_t line) {
   DWIN_Frame_AreaCopy(1, 1, 148, 94, 162, LBLX, line);   // "Steps-per-mm"
 }
-void say_x(const uint16_t inset, const uint16_t line) {
+void say_x(const uint16_t inset, const uint16_t line)
+{
   DWIN_Frame_AreaCopy(1, 95, 104, 102, 114, LBLX + inset, line); // "X"
 }
-void say_y(const uint16_t inset, const uint16_t line) {
+void say_y(const uint16_t inset, const uint16_t line)
+{
   DWIN_Frame_AreaCopy(1, 104, 104, 110, 114, LBLX + inset, line); // "Y"
 }
-void say_z(const uint16_t inset, const uint16_t line) {
+void say_z(const uint16_t inset, const uint16_t line)
+{
   DWIN_Frame_AreaCopy(1, 112, 104, 120, 114, LBLX + inset, line); // "Z"
 }
-void say_e(const uint16_t inset, const uint16_t line) {
+void say_e(const uint16_t inset, const uint16_t line)
+{
   DWIN_Frame_AreaCopy(1, 237, 119, 244, 129, LBLX + inset, line); // "E"
 }
+//107011 -20210910 激光模式下的设置界面
+#if HAS_CUTTER
+// 107011 -20210918
+// 切换FDM/Laser 警告界面 选择框
+void Draw_Sw_Warning_Highlight(bool sel)
+{
+  HMI_flag.select_flag = sel;
+  if (sel)
+  {
+    if (HMI_IsChinese())
+    {
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 230);
+      DWIN_ICON_Show(ICON, ICON_SwConfirm_C, 20 + 55, 230 + 7);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 280);
+      DWIN_Frame_AreaCopy(1, 167, 178, 200, 193, 118, 287); //返回
+    }
+    else
+    {
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 230);
+      DWIN_ICON_Show(ICON, ICON_SwConfirm_E, 20 + 55, 230 + 7);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 280);
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 106, 287, F("Return"));
+    }
+  }
+  else
+  {
+    if (HMI_IsChinese())
+    {
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 230);
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_Return_C, 20 + 55, 280 + 7);
+      DWIN_Frame_AreaCopy(1, 129, 177, 164, 193, 118, 237); //确定
+    }
+    else
+    {
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 230);
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_Return_E, 20 + 55, 280 + 7);
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 106, 237, F("Confirm"));
+    }
+  }
+  //DWIN_UpdateLCD();
+}
+// 107011 -20210922
+// 主界面 切换FDM/Laser
+void Draw_Main_Sw_Fdm_Laser_Highlight(bool sel)
+{
+  HMI_flag.select_flag = sel;
+  const uint16_t c1 = sel ? Select_Color : Color_Bg_Window,
+                 c2 = sel ? Color_Bg_Window : Select_Color;
 
+  DWIN_Draw_Rectangle(0, c1, 29, 140, 241, 241);
+  DWIN_Draw_Rectangle(0, c1, 28, 139, 240, 240);
+  DWIN_Draw_Rectangle(0, c2, 29, 260, 241, 360);
+  DWIN_Draw_Rectangle(0, c2, 28, 259, 240, 359);
+  DWIN_UpdateLCD();
+}
+// 107011 -20210918
+// 打印 警告界面
+void Draw_Print_Warning_Highlight(uint8_t sel)
+{
+  HMI_flag.select_flag = sel;
+
+  // 设置选中框
+  switch (sel)
+  {
+  	case 0:
+      //DWIN_ICON_Show(ICON, ICON_Selected, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 330);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 380);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 430);
+
+      if (HMI_IsChinese()) {
+        DWIN_ICON_Show(ICON, ICON_WR_SELECT_TUNE_C, 20, 280); // 设置
+        //DWIN_Frame_AreaCopy(1, 57,178, 128,194, 100, 337);// 直接打印
+        DWIN_Frame_AreaCopy(1, 57, 178, 94, 194, 100, 337);// 直接
+        DWIN_Frame_AreaCopy(1, 200, 178, 235, 194, 100+37, 337);// 雕刻
+        
+        DWIN_Frame_AreaCopy(1, 117,421, 171,439, 109, 387);// 跑边框
+        DWIN_Frame_AreaCopy(1, 164,178, 200,195, 118, 437);//返回 
+      }else{
+        DWIN_ICON_Show(ICON, ICON_WR_SELECT_TUNE_E, 20, 280);
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 78, 337, F("Direct engrave"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 94, 387, F("Run Range"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 108, 438, F("Return"));
+      }
+	  break;
+  	case 1:
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 330);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 380);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 430);
+
+      if (HMI_IsChinese()) {
+        //DWIN_Frame_AreaCopy(1, 117,421, 171,439, 118, 287);// 设置
+        DWIN_ICON_Show(ICON, LABEL_WR_NOSELECT_TUNE_C, 118, 280+7); // 设置
+
+        DWIN_ICON_Show(ICON, ICON_DirectPrinting_C, 20, 330);
+        //DWIN_Frame_AreaCopy(1, 57,178, 128,196, 100, 327);// 直接打印
+        DWIN_Frame_AreaCopy(1, 117,421, 171,439, 109, 387);// 跑边框
+        DWIN_Frame_AreaCopy(1, 164,178, 200,195, 118, 437);//返回 
+      }else{
+        DWIN_ICON_Show(ICON, ICON_DirectPrinting_E, 20, 330);
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 114, 290, F("Tune"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 94, 387, F("Run Range"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 108, 438, F("Return"));
+      }
+	  break;
+	  case 2:
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 330);
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 380);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 430);
+      if (HMI_IsChinese()) {
+        DWIN_ICON_Show(ICON, LABEL_WR_NOSELECT_TUNE_C, 118, 280+7); // 设置
+        DWIN_ICON_Show(ICON, ICON_RunRange_C, 20+55, 380+7);
+        //DWIN_Frame_AreaCopy(1, 57,178, 128,194, 100, 337);// 直接打印
+        DWIN_Frame_AreaCopy(1, 57, 178, 94, 194, 100, 337);// 直接
+        DWIN_Frame_AreaCopy(1, 200, 178, 235, 194, 100+37, 337);// 雕刻
+
+        //DWIN_Frame_AreaCopy(1, 156,265, 199,279, 109, 377);// 跑边框
+        DWIN_Frame_AreaCopy(1, 164,178, 200,195, 118, 437);//返回
+      }else{
+        DWIN_ICON_Show(ICON, ICON_RunRange_E, 20+55, 380+7);
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 114, 290, F("Tune"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 78, 337, F("Direct engrave"));
+        DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 108, 438, F("Return"));
+      }
+	  break;
+  	case 3:
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 280);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 330);
+      DWIN_ICON_Show(ICON, ICON_NotSelect, 20, 380);
+      DWIN_ICON_Show(ICON, ICON_Selected, 20, 430);
+      if (HMI_IsChinese()) {
+        DWIN_ICON_Show(ICON, LABEL_WR_NOSELECT_TUNE_C, 118, 280+7); // 设置
+        DWIN_ICON_Show(ICON, ICON_Return_C, 20+55, 430+7);
+        //DWIN_Frame_AreaCopy(1, 57,178, 128,194, 100, 337);// 直接打印
+        DWIN_Frame_AreaCopy(1, 57, 178, 94, 194, 100, 337);// 直接
+        DWIN_Frame_AreaCopy(1, 200, 178, 235, 194, 100+37, 337);// 雕刻
+        DWIN_Frame_AreaCopy(1, 117,421, 171,439, 109, 387);// 跑边框
+      }else{
+       DWIN_ICON_Show(ICON, ICON_Return_E, 20+55, 430+7);
+       DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 114, 290, F("Tune"));
+       DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 78, 337, F("Direct engrave"));
+       DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, 89, 387, F("Run Range"));
+      }
+	  break;
+  }
+  DWIN_UpdateLCD();
+}
+void Draw_Tune_Laser_Menu() {
+  Clear_Main_Window();
+  if (HMI_IsChinese()) {
+    DWIN_Frame_AreaCopy(1, 73, 2, 100, 13, 14, 9);//DWIN_Frame_TitleCopy(1, 192, 1, 233, 14); // "Move"
+    DWIN_Frame_AreaCopy(1, 58, 118, 106, 132, LBLX, MBASE(1));
+    DWIN_Frame_AreaCopy(1, 109, 118, 157, 132, LBLX, MBASE(2));
+    DWIN_Frame_AreaCopy(1, 160, 118, 209, 132, LBLX, MBASE(3));
+
+    DWIN_Frame_AreaCopy(1, 156, 265, 200, 280, LBLX, MBASE(4)); // 跑边框
+    //DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, LBLX, MBASE(4), F("Run Range"));
+  }
+  else {
+    #ifdef USE_STRING_HEADINGS
+      Draw_Title(GET_TEXT_F(MSG_TUNE));//Draw_Title(GET_TEXT_F(MSG_MOVE_AXIS));
+    #endif
+    draw_move_en(MBASE(1)); say_x(36, MBASE(1));                    // "Move X"
+    draw_move_en(MBASE(2)); say_y(36, MBASE(2));                    // "Move Y"
+    draw_move_en(MBASE(3)); say_z(36, MBASE(3));                    // "Move Z"
+    //DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Window, LBLX, MBASE(4), F("Run Range"));
+    DWIN_Frame_AreaCopy(1, 51,218, 120,233, LBLX, MBASE(4)); // 跑边框
+
+  }
+  DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * MINUNITMULT);
+  DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), current_position.y * MINUNITMULT);
+  DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(3), current_position.z * MINUNITMULT);
+  Draw_Back_First(select_axis.now == 0);
+  if (select_axis.now) Draw_Menu_Cursor(select_axis.now);
+  // Draw separators and icons
+  LOOP_L_N(i, 3 ) Draw_Menu_Line(i + 1, ICON_MoveX + i);
+  Draw_Menu_Line(4, ICON_RunRange);
+}
+#endif //#if HAS_CUTTER
 void Draw_Motion_Menu() {
   Clear_Main_Window();
-
   if (HMI_IsChinese()) {
     DWIN_Frame_TitleCopy(1, 1, 16, 28, 28);                                     // "Motion"
     DWIN_Frame_AreaCopy(1, 173, 133, 228, 147, LBLX, MBASE(MOTION_CASE_RATE));  // Max speed
     DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(MOTION_CASE_ACCEL));        // Max...
     DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(MOTION_CASE_ACCEL) + 1); // ...Acceleration
-    #if HAS_CLASSIC_JERK
-      DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(MOTION_CASE_JERK));        // Max...
-      DWIN_Frame_AreaCopy(1, 1, 180, 28, 192, LBLX + 27, MBASE(MOTION_CASE_JERK) + 1);  // ...
-      DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 54, MBASE(MOTION_CASE_JERK));   // ...Jerk
-    #endif
-    DWIN_Frame_AreaCopy(1, 153, 148, 194, 161, LBLX, MBASE(MOTION_CASE_STEPS));         // Flow ratio
+#if HAS_CLASSIC_JERK
+    DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(MOTION_CASE_JERK));       // Max...
+    DWIN_Frame_AreaCopy(1, 1, 180, 28, 192, LBLX + 27, MBASE(MOTION_CASE_JERK) + 1); // ...
+    DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 54, MBASE(MOTION_CASE_JERK));  // ...Jerk
+#endif
+    DWIN_Frame_AreaCopy(1, 153, 148, 194, 161, LBLX, MBASE(MOTION_CASE_STEPS)); // Flow ratio
   }
   else 
   {
@@ -1088,10 +1562,8 @@ void Draw_Motion_Menu() {
       draw_steps_per_mm(MBASE(MOTION_CASE_STEPS));                                      // "Steps-per-mm"
     #endif
   }
-
   Draw_Back_First(select_motion.now == 0);
   if (select_motion.now) Draw_Menu_Cursor(select_motion.now);
-
   uint8_t i = 0;
   #define _MOTION_ICON(N) Draw_Menu_Line(++i, ICON_MaxSpeed + (N) - 1)
   _MOTION_ICON(MOTION_CASE_RATE); Draw_More_Icon(i);
@@ -1101,99 +1573,357 @@ void Draw_Motion_Menu() {
   #endif
   _MOTION_ICON(MOTION_CASE_STEPS); Draw_More_Icon(i);
 }
+#if HAS_CUTTER //
 
+
+//激光聚焦界面，"Z轴移动" 菜单的选中/取消选中逻辑
+void Draw_Laser_Focus_Z_menu(bool sel)
+{
+  DWIN_Draw_Line(Line_Color, 21, 221, 248, 221); //Z轴移动 ------
+  DWIN_Draw_Line(Line_Color, 21, 268, 248, 268); //Z轴移动 ------
+
+  if(sel){
+      DWIN_Draw_Rectangle(0,Select_Color, 18, 219, 18+232, 270);
+  }else{
+      DWIN_Draw_Rectangle(0,Color_Bg_Black, 18, 219, 18+232, 270);
+  }
+
+}
+
+// 107011 -20211122
+//聚焦界面选中按钮逻辑
+void Draw_Laser_Focus_Highlight(uint8_t sel)
+{
+  HMI_flag.select_flag = sel;
+
+  switch (sel)
+  {
+  	case 0: //Z轴移动
+      Draw_Laser_Focus_Z_menu(true); //Z轴移动
+
+      if (HMI_IsChinese()) {
+        DWIN_ICON_Show(ICON, LABEL_NOSELECT_FINISH_C, 20, 310);
+      }else{
+        DWIN_ICON_Show(ICON, LABEL_NOSELECT_FINISH_E, 20, 310);
+      }
+	  break;
+	  case 1: // 确定
+      Draw_Laser_Focus_Z_menu(false); //Z轴移动
+      if (HMI_IsChinese()) {
+        DWIN_ICON_Show(ICON, LABEL_SELECT_FINISH_C, 20, 310);
+      }else{
+        DWIN_ICON_Show(ICON, LABEL_SELECT_FINISH_E, 20, 310);
+      }
+	  break;
+  }
+  DWIN_UpdateLCD();
+}
+
+//107011 -20211122
+// 激光聚焦提示界面
+void Draw_Laser_Focus()
+{
+  Clear_Main_Window();
+  //  Clear_Menu_Area();
+  
+  DWIN_ICON_Show(ICON, ICON_BG_FOCUS, 10,40);//画底框
+  
+  HMI_ValueStruct.Move_Z_scaled = current_position.z * MINUNITMULT;
+  DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black/*Color_Bg_Window*/, 3, UNITFDIGITS, 200, 236, HMI_ValueStruct.Move_Z_scaled);
+
+  if (HMI_IsChinese())
+  {
+    // DWIN_Frame_TitleCopy(1, 86, 30, 142, 45);  // 激光打印
+    DWIN_Frame_AreaCopy(1, 118, 262, 155, 281, 20, 53); //注意
+
+    //DWIN_Frame_TitleCopy(1, 86, 30, 142, 45);               // 激光打印
+    DWIN_ICON_Show(ICON, LABEL_FOCUS_HINT_C, 20,97);//聚焦提示
+    DWIN_ICON_Show(ICON, LABEL_FOCUS_C, 56, 230);//激光聚焦
+ 
+  }
+  else
+  {
+    // DWIN_Frame_TitleCopy(1, 165, 436, 212, 448); //激光打印
+     DWIN_Frame_AreaCopy(1, 4, 215, 45, 233, 20, 53); //Note
+     DWIN_ICON_Show(ICON, LABEL_FOCUS_HINT_E, 20, 97);//聚焦提示
+     DWIN_ICON_Show(ICON, LABEL_FOCUS_E, 56, 230);//激光聚焦
+  }
+
+  DWIN_ICON_Show(ICON, ICON_Note, 62, 56);
+  DWIN_ICON_Show(ICON, ICON_MoveZ, 26,234);
+
+  Draw_Laser_Focus_Highlight(0);
+
+
+  DWIN_UpdateLCD();
+}
+
+
+
+//107011 -20210918
+// 切换警告界面
+void Draw_Laser_Fdm_Sw_Warning()
+{
+  Clear_Main_Window();
+  //  Clear_Menu_Area();
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_AreaCopy(1, 118, 262, 155, 281, 20, 53); //注意
+    if (laser_device.is_laser_device())
+    {
+      //DWIN_Frame_TitleCopy(1,0,421, 56,437); // 融积打印
+      //DWIN_Frame_TitleCopy(1, 86, 30, 142, 45);               // 激光打印
+      DWIN_Frame_AreaCopy(1, 157, 228, 259, 244, 20, 97);     //请确保打印机的
+      DWIN_Frame_AreaCopy(1, 0, 245, 126, 260, 20 + 102, 97); //FDM喷头套件已经安
+      //DWIN_Frame_AreaCopy(1, 84, 245, 126, 261, 20+102+1+60, 108);  //已经安
+      DWIN_Frame_AreaCopy(1, 126, 245, 269, 260, 20, 97 + 21);        //装好，并且对应接口已
+      DWIN_Frame_AreaCopy(1, 0, 261, 48, 277, 20 + 143 + 1, 97 + 21); //经接好！
+    }
+    else
+    {
+      DWIN_Frame_AreaCopy(1, 157, 228, 259, 244, 20, 97);             //请确保打印机的
+      DWIN_Frame_AreaCopy(1, 55, 262, 115, 278, 20 + 102, 97);        //激光模块
+      DWIN_Frame_AreaCopy(1, 84, 245, 126, 261, 20 + 102 + 60, 97);   //已经安
+      DWIN_Frame_AreaCopy(1, 126, 245, 269, 260, 20, 97 + 21);        //装好，并且对应接口已
+      DWIN_Frame_AreaCopy(1, 0, 261, 48, 277, 20 + 143 + 1, 97 + 21); //经接好！
+    }
+  }
+  else
+  {
+    DWIN_Frame_AreaCopy(1, 4, 215, 45, 233, 20, 53); //Note
+    if (laser_device.is_laser_device())
+    {
+      //DWIN_Frame_TitleCopy(1, 165, 436, 212, 448); // LASER
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97, F("Please ensure that the FDM nozzle"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 16, F("kit of the printer has been"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 32, F("installed and the corresponding"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 48, F("interface has been connected!"));
+      // DWIN_Frame_AreaCopy(1, 4,237, 220,252, 20, 97); // Please ensure that the FDM nozzle
+      // DWIN_Frame_AreaCopy(1, 222,237, 220,252, 20, 97);
+    }
+    else
+    {
+      //DWIN_Frame_TitleCopy(2,128,437, 160,450); // FDM
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97, F("Ensure that the laser module of"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 16, F("the printer is properly installed"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 32, F("and the corresponding interface"));
+      DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 5, 97 + 48, F("is properly connected!"));
+    }
+  }
+  DWIN_ICON_Show(ICON, ICON_Note, 62, 56);
+  Draw_Sw_Warning_Highlight(true);
+  DWIN_UpdateLCD();
+}
+//107011 -20210918
+// 打印警告界面
+void Draw_print_Warning()
+{
+  const signed char offset = 13;
+  Clear_Main_Window();
+  //Clear_Menu_Area();
+
+  // DWIN_Draw_Rectangle(1, Color_Bg_Window, 20, 320, 252, 360);
+  // DWIN_Draw_Rectangle(1, Color_Bg_Window, 20, 370, 252, 410);
+  // DWIN_Draw_Rectangle(1, Color_Bg_Window, 20, 420, 252, 460);
+  DWIN_ICON_Show(ICON, ICON_Laser_W_1, 18, 191-25);
+  DWIN_ICON_Show(ICON, ICON_Laser_W_2, 132, 212-25);
+  if (HMI_IsChinese())
+  {
+
+    //DWIN_Frame_AreaCopy(1, 87, 30, 143, 45, 14, 9);     // 激光打印
+    DWIN_Frame_AreaCopy(1, 87, 30, 114, 45, 14, 9); // 激光
+    DWIN_Frame_AreaCopy(1, 234,30, 262, 45, 14+28, 9); // 雕刻
+
+    DWIN_Frame_AreaCopy(1, 118, 262, 155, 281, 20, 53-offset); //注意
+
+    DWIN_Frame_AreaCopy(1, 0, 196, 223, 210, 20, 87-offset);     //1.请勿将身体部位伸入激光器工作范
+    DWIN_Frame_AreaCopy(1, 223, 195, 257, 210, 20, 108-offset);  // 围内，
+    DWIN_Frame_AreaCopy(1, 0, 211, 91, 227, 54 + 1, 108-offset); // 以免激光灼伤。
+
+    DWIN_Frame_AreaCopy(1, 98, 211, 254, 227, 20, 129-offset); // 2.请确保激光雕刻范围准
+    DWIN_Frame_AreaCopy(1, 0, 227, 70, 244, 176, 129-offset);  // 确，并正确
+    DWIN_Frame_AreaCopy(1, 70, 227, 149, 243, 20, 150-offset); //佩戴护目镜。
+  }
+  else
+  {
+    DWIN_Frame_AreaCopy(1, 166, 437, 212, 449, 14, 9); //laser
+    DWIN_Frame_AreaCopy(1, 4, 215, 45, 233, 20, 53-offset);   //Note
+
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 77-offset, F("1.Do not extend your body parts"));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 77 + 16-offset, F(" into the working range of the"));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 77 + 32-offset, F(" laser to avoid laser burns."));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 130-offset, F("2.please make sure the laser "));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 130 + 16-offset, F(" engraving range is accurate,"));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 10, 130 + 32-offset, F(" and wear or goggles correctly."));
+  }
+  DWIN_ICON_Show(ICON, ICON_Note, 62, 56-offset);
+  Draw_Print_Warning_Highlight(1);
+
+  DWIN_UpdateLCD();
+}
+void Draw_Laser_Motion_Menu()
+{
+  Clear_Main_Window();
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_TitleCopy(1, 1, 16, 28, 28);                                                  // "Motion"
+    DWIN_Frame_AreaCopy(1, 173, 133, 228, 147, LBLX, MBASE(MOTION_LASER_CASE_RATE));         // Max speed
+    DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(MOTION_LASER_CASE_ACCEL));        // Max...
+    DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(MOTION_LASER_CASE_ACCEL) + 1); // ...Acceleration
+#if HAS_CLASSIC_JERK
+    DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(MOTION_LASER_CASE_JERK));       // Max...
+    DWIN_Frame_AreaCopy(1, 1, 180, 28, 192, LBLX + 27, MBASE(MOTION_LASER_CASE_JERK) + 1); // ...
+    DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 54, MBASE(MOTION_LASER_CASE_JERK));  // ...Jerk
+#endif
+    //DWIN_Frame_AreaCopy(1, 153, 148, 194, 161, LBLX, MBASE(MOTION_LASER_CASE_STEPS));         // Flow ratio
+  }
+  else {
+    #ifdef USE_STRING_HEADINGS
+      Draw_Title(GET_TEXT_F(MSG_MOTION));
+    #else
+      DWIN_Frame_TitleCopy(1, 144, 16, 189, 26);                                        // "Motion"
+    #endif
+    #ifdef USE_STRING_TITLES
+      DWIN_Draw_Label(MBASE( ), F("Feedrate"));
+      DWIN_Draw_Label(MBASE(MOTION_LASER_CASE_ACCEL), GET_TEXT_F(MSG_ACCELERATION));
+      #if HAS_CLASSIC_JERK
+        DWIN_Draw_Label(MBASE(MOTION_LASER_CASE_JERK), GET_TEXT_F(MSG_JERK));
+      #endif
+      DWIN_Draw_Label(MBASE(MOTION_LASER_CASE_STEPS), GET_TEXT_F(MSG_STEPS_PER_MM));
+    #else
+      draw_max_en(MBASE(MOTION_LASER_CASE_RATE)); draw_speed_en(27, MBASE(MOTION_LASER_CASE_RATE)); // "Max Speed"
+      draw_max_accel_en(MBASE(MOTION_LASER_CASE_ACCEL));                                      // "Max Acceleration"
+      #if HAS_CLASSIC_JERK
+        draw_max_en(MBASE(MOTION_LASER_CASE_JERK)); draw_jerk_en(MBASE(MOTION_LASER_CASE_JERK));    // "Max Jerk"
+      #endif
+      //draw_steps_per_mm(MBASE(MOTION_LASER_CASE_STEPS));                                      // "Steps-per-mm"
+    #endif
+  }
+  Draw_Back_First(select_motion.now == 0);
+  if (select_motion.now) Draw_Menu_Cursor(select_motion.now);
+  uint8_t i = 0;
+  #define _MOTION_ICON(N) Draw_Menu_Line(++i, ICON_MaxSpeed + (N) - 1)
+  _MOTION_ICON(MOTION_LASER_CASE_RATE); Draw_More_Icon(i);
+  _MOTION_ICON(MOTION_LASER_CASE_ACCEL); Draw_More_Icon(i);
+  #if HAS_CLASSIC_JERK
+    _MOTION_ICON(MOTION_LASER_CASE_JERK); Draw_More_Icon(i);
+  #endif
+  //_MOTION_ICON(MOTION_LASER_CASE_STEPS); Draw_More_Icon(i);
+}
+#endif
 //
 // Draw Popup Windows
 //
 #if HAS_HOTEND || HAS_HEATED_BED
-
-  void DWIN_Popup_Temperature(const bool toohigh) {
-    Clear_Popup_Area();
-    Draw_Popup_Bkgd_105();
-    if (toohigh) 
-    {
-      DWIN_ICON_Show(ICON, ICON_TempTooHigh, 102, 165);
-      if (HMI_IsChinese()) 
-      {
-        DWIN_Frame_AreaCopy(1, 103, 371, 237, 386, 52, 285);
-        DWIN_Frame_AreaCopy(1, 151, 389, 185, 402, 187, 285);
-        DWIN_Frame_AreaCopy(1, 189, 389, 271, 402, 95, 310);
-      }
-      else 
-      {
-        DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 36, 300, F("Nozzle or Bed temperature"));
-        DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 92, 300, F("is too high"));
-      }
-    }
-    else {
-      DWIN_ICON_Show(ICON, ICON_TempTooLow, 102, 165);
-      if (HMI_IsChinese()) {
-        DWIN_Frame_AreaCopy(1, 103, 371, 270, 386, 52, 285);
-        DWIN_Frame_AreaCopy(1, 189, 389, 271, 402, 95, 310);
-      }
-      else {
-        DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 36, 300, F("Nozzle or Bed temperature"));
-        DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 92, 300, F("is too low"));
-      }
-    }
-  }
-
-#endif
-
-void Draw_Popup_Bkgd_60() {
-  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 258, 330);
-}
-
-#if HAS_HOTEND
-
-  void Popup_Window_ETempTooLow() {
-    Clear_Main_Window();
-    Draw_Popup_Bkgd_60();
-    DWIN_ICON_Show(ICON, ICON_TempTooLow, 102, 105);
-    if (HMI_IsChinese()) {
-      DWIN_Frame_AreaCopy(1, 103, 371, 136, 386, 69, 240);
-      DWIN_Frame_AreaCopy(1, 170, 371, 270, 386, 102, 240);
-      DWIN_ICON_Show(ICON, ICON_Confirm_C, 86, 280);
-    }
-    else {
-      DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 20, 235, F("Nozzle temperature is too low"));
-      DWIN_ICON_Show(ICON, ICON_Confirm_E, 86, 280);
-    }
-  }
-#endif
-
-void Popup_Window_Resume() {
+void DWIN_Popup_Temperature(const bool toohigh)
+{
   Clear_Popup_Area();
   Draw_Popup_Bkgd_105();
-  if (HMI_IsChinese()) {
-    DWIN_Frame_AreaCopy(1, 160, 338, 235, 354, 98, 135);
-    DWIN_Frame_AreaCopy(1, 103, 321, 271, 335, 52, 192);
-    DWIN_ICON_Show(ICON, ICON_Cancel_C,    26, 307);
+  if (toohigh)
+  {
+    DWIN_ICON_Show(ICON, ICON_TempTooHigh, 102, 165);
+    if (HMI_IsChinese())
+    {
+      DWIN_Frame_AreaCopy(1, 103, 371, 237, 386, 52, 285);
+      DWIN_Frame_AreaCopy(1, 151, 389, 185, 402, 187, 285);
+      DWIN_Frame_AreaCopy(1, 189, 389, 271, 402, 95, 310);
+    }
+    else
+    {
+      DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 36, 300, F("Nozzle or Bed temperature"));
+      DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 92, 300, F("is too high"));
+    }
+  }
+  else
+  {
+    DWIN_ICON_Show(ICON, ICON_TempTooLow, 102, 165);
+    if (HMI_IsChinese())
+    {
+      DWIN_Frame_AreaCopy(1, 103, 371, 270, 386, 52, 285);
+      DWIN_Frame_AreaCopy(1, 189, 389, 271, 402, 95, 310);
+    }
+    else
+    {
+      DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 36, 300, F("Nozzle or Bed temperature"));
+      DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 92, 300, F("is too low"));
+    }
+  }
+}
+#endif
+void Draw_Popup_Bkgd_60()
+{
+  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 258, 330);
+}
+//107011 -20210918
+// 开机 激光/FDM选择
+void Draw_Popup_FDM_Laser()
+{
+  DWIN_Draw_Rectangle(1, Color_Bg_Window, 30, 141, 242, 241);
+  DWIN_Draw_Rectangle(1, Color_Bg_Window, 30, 261, 242, 361);
+}
+#if HAS_HOTEND
+void Popup_Window_ETempTooLow()
+{
+  Clear_Main_Window();
+  Draw_Popup_Bkgd_60();
+  DWIN_ICON_Show(ICON, ICON_TempTooLow, 102, 105);
+  if (HMI_IsChinese())
+  {
+    // DWIN_Frame_AreaCopy(1, 103, 371, 136, 386, 69, 240);
+    // DWIN_Frame_AreaCopy(1, 170, 371, 270, 386, 102, 240);
+    DWIN_ICON_Show(ICON, NOZZLE_TEMP_TOOLOW_TIPS_C, 14, 188);
+
+    DWIN_ICON_Show(ICON, ICON_Confirm_C, 86, 280);
+  }
+  else
+  {
+    DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 20, 235, F("Nozzle temperature is too low"));
+    DWIN_ICON_Show(ICON, ICON_Confirm_E, 86, 280);
+  }
+}
+#endif
+
+void Popup_Window_Resume()
+{
+  Clear_Popup_Area();
+  Draw_Popup_Bkgd_105();
+  if (HMI_IsChinese())
+  {
+    // DWIN_Frame_AreaCopy(1, 160, 338, 235, 354, 98, 135);
+    // DWIN_Frame_AreaCopy(1, 103, 321, 271, 335, 52, 192);
+    DWIN_ICON_Show(ICON, POWER_LOW_TIPS_C, 14, 99+30);// 提示
+    
+    DWIN_ICON_Show(ICON, ICON_Cancel_C, 26, 307);
     DWIN_ICON_Show(ICON, ICON_Continue_C, 146, 307);
   }
-  else {
+  else
+  {
     DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 14) / 2, 115, F("Continue Print"));
     DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 22) / 2, 192, F("It looks like the last"));
     DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 22) / 2, 212, F("file was interrupted."));
-    DWIN_ICON_Show(ICON, ICON_Cancel_E,    26, 307);
+    DWIN_ICON_Show(ICON, ICON_Cancel_E, 26, 307);
     DWIN_ICON_Show(ICON, ICON_Continue_E, 146, 307);
   }
 }
-
-void Popup_Window_Home(const bool parking/*=false*/) {
+void Popup_Window_Home(const bool parking /*=false*/)
+{
   Clear_Main_Window();
   Draw_Popup_Bkgd_60();
   DWIN_ICON_Show(ICON, ICON_BLTouch, 101, 105);
-  if (HMI_IsChinese()) {
-    DWIN_Frame_AreaCopy(1, 0, 371, 33, 386, 85, 240);
-    DWIN_Frame_AreaCopy(1, 203, 286, 271, 302, 118, 240);
-    DWIN_Frame_AreaCopy(1, 0, 389, 150, 402, 61, 280);
+  if (HMI_IsChinese())
+  {
+    // DWIN_Frame_AreaCopy(1, 0, 371, 33, 386, 85, 240);
+    // DWIN_Frame_AreaCopy(1, 203, 286, 271, 302, 118, 240);
+    // DWIN_Frame_AreaCopy(1, 0, 389, 150, 402, 61, 280);
+    DWIN_ICON_Show(ICON, AUTOHOME_TIPS_C, 14, 233);
   }
-  else {
+  else
+  {
     DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * (parking ? 7 : 10)) / 2, 230, parking ? F("Parking") : F("Homing XYZ"));
     DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 23) / 2, 260, F("Please wait until done."));
   }
 }
+
 //rock_20211025 上电回零提示
 static void Electricity_back_to_zero(const bool parking/*=false*/) {
   Clear_Main_Window();
@@ -1217,18 +1947,18 @@ static void Electricity_back_to_zero(const bool parking/*=false*/) {
     DWIN_ICON_Show(ICON, ICON_AutoLeveling, 101, 105);
     if (HMI_IsChinese()) 
     {
-      DWIN_Frame_AreaCopy(1, 0, 371, 100, 386, 84, 240);
-      DWIN_Frame_AreaCopy(1, 0, 389, 150, 402, 61, 280);
+      // DWIN_Frame_AreaCopy(1, 0, 371, 100, 386, 84, 240);
+      // DWIN_Frame_AreaCopy(1, 0, 389, 150, 402, 61, 280);
+      DWIN_ICON_Show(ICON, LEVEL_TIPS_C, 14, 230);
     }
     else {
       DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 13) / 2, 230, GET_TEXT_F(MSG_BED_LEVELING));
       DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 23) / 2, 260, F("Please wait until done."));
     }
-  }
-
+}
 #endif
-
-void Draw_Select_Highlight(const bool sel) {
+void Draw_Select_Highlight(const bool sel)
+{
   HMI_flag.select_flag = sel;
   const uint16_t c1 = sel ? Select_Color : Color_Bg_Window,
                  c2 = sel ? Color_Bg_Window : Select_Color;
@@ -1237,63 +1967,151 @@ void Draw_Select_Highlight(const bool sel) {
   DWIN_Draw_Rectangle(0, c2, 145, 279, 246, 318);
   DWIN_Draw_Rectangle(0, c2, 144, 278, 247, 319);
 }
-
-void Popup_window_PauseOrStop() {
+void Popup_window_PauseOrStop()
+{
   Clear_Main_Window();
   Draw_Popup_Bkgd_60();
-  if (HMI_IsChinese()) 
-  {
-    if(select_print.now == 1) DWIN_Frame_AreaCopy(1, 237, 338, 269, 356, 98, 150);
-    else if (select_print.now == 2) DWIN_Frame_AreaCopy(1, 221, 320, 253, 336, 98, 150);
-    DWIN_Frame_AreaCopy(1, 220, 304, 264, 319, 130, 150);
-    DWIN_ICON_Show(ICON, ICON_Confirm_C, 26, 280);
-    DWIN_ICON_Show(ICON, ICON_Cancel_C, 146, 280);
+
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) // 激光
+    {
+      if (HMI_IsChinese())
+      {
+        if (select_print.now == 1) DWIN_ICON_Show(ICON, PAUSE_ENGRAVING_TIPS_C, 14, 128);// DWIN_Frame_AreaCopy(1, 180,405, 209,419, 98, 150);//DWIN_Frame_AreaCopy(1, 237, 338, 269, 356, 98, 150);
+        else if (select_print.now == 2) DWIN_ICON_Show(ICON, STOP_ENGRAVING_TIPS_C, 14, 128);// DWIN_Frame_AreaCopy(1, 150,446, 179,419, 98, 150);//DWIN_Frame_AreaCopy(1, 221, 320, 253, 336, 98, 150);
+        //DWIN_Frame_AreaCopy(1, 180,211, 209,226, 130, 150); //雕刻
+        DWIN_ICON_Show(ICON, ICON_Confirm_C, 26, 280);
+        DWIN_ICON_Show(ICON, ICON_Cancel_C, 146, 280);
+      }
+      else
+      {
+        if (select_print.now == 1) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, /*(272 - 8 * 11) / 2*/80, 150, F("Pause engraving?"));//GET_TEXT_F(MSG_PAUSE_PRINT));
+        else if (select_print.now == 2) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, /*(272 - 8 * 10) / 2*/80, 150, F("Stop engraving?"));//GET_TEXT_F(MSG_STOP_PRINT));
+        DWIN_ICON_Show(ICON, ICON_Confirm_E, 26, 280);
+        DWIN_ICON_Show(ICON, ICON_Cancel_E, 146, 280);
+      }
+      Draw_Select_Highlight(true);
+    }else
+  #endif
+  {// FDM
+    if (HMI_IsChinese())
+    {
+      if (select_print.now == 1) DWIN_ICON_Show(ICON, PAUSE_PRINT_TIPS_C, 14, 128);//DWIN_Frame_AreaCopy(1, 237, 338, 269, 356, 98, 150);
+      else if (select_print.now == 2) DWIN_ICON_Show(ICON, STOP_PRINT_TIPS_C, 14, 128);//DWIN_Frame_AreaCopy(1, 221, 320, 253, 336, 98, 150);
+      //DWIN_Frame_AreaCopy(1, 220, 304, 264, 319, 130, 150);
+      DWIN_ICON_Show(ICON, ICON_Confirm_C, 26, 280);
+      DWIN_ICON_Show(ICON, ICON_Cancel_C, 146, 280);
+    }
+    else
+    {
+      if (select_print.now == 1) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 11) / 2, 150, GET_TEXT_F(MSG_PAUSE_PRINT));
+      else if (select_print.now == 2) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 10) / 2, 150, GET_TEXT_F(MSG_STOP_PRINT));
+      DWIN_ICON_Show(ICON, ICON_Confirm_E, 26, 280);
+      DWIN_ICON_Show(ICON, ICON_Cancel_E, 146, 280);
+    }
+    Draw_Select_Highlight(true);
+  }
+}
+void Draw_Printing_Screen() {
+  if (HMI_IsChinese()) {
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device()){
+        if( laser_device.laser_printing)
+        {
+          //Clear_Title_Bar();
+          //DWIN_Frame_TitleCopy(1, 191, 30, 235, 45); // 打印中
+          DWIN_Frame_AreaCopy(1, 234, 30, 262, 45, 14, 9); // 雕刻
+          DWIN_Frame_AreaCopy(1, 219, 30, 233, 45, 14+28, 9); // 中
+        }else{
+          //DWIN_Frame_AreaCopy(1, 146,30,  187,45,  14,  9);  // 待打印
+          DWIN_Frame_AreaCopy(1, 146, 30, 160, 45,  14,  9);  // 待
+          DWIN_Frame_AreaCopy(1, 234, 30, 262, 45, 14+14, 9); // 雕刻
+        }
+        DWIN_Frame_AreaCopy(1, 178,52, 208,67, 41, 188);    // 雕刻
+        //DWIN_Frame_AreaCopy(1, 33, 71, 64, 85, 41+28, 188);    // 时间
+        DWIN_Frame_AreaCopy(1, 33,71, 63, 86, 41+28, 188);    // 时间
+      }else
+    #endif //FDM处理
+    {
+      //DWIN_Frame_AreaCopy(1, 30, 1, 71, 14, 14, 9);    // 打印中 标题
+      DWIN_Frame_AreaCopy(1, 30, 1, 59, 14, 14, 9);    // 打印
+      DWIN_Frame_AreaCopy(1, 59, 1+1, 71, 14+1, 14+29, 9);    // 中
+
+      DWIN_Frame_AreaCopy(1, 0, 72, 63, 86, 41, 188);    // 打印时间
+    }
+    //DWIN_Frame_AreaCopy(1, 0, 72, 63, 86, 41, 188);    // 打印时间
+    DWIN_Frame_AreaCopy(1, 65, 72, 128, 86, 176, 188); // 剩余时间
   }
   else 
   {
-    if (select_print.now == 1) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 11) / 2, 150, GET_TEXT_F(MSG_PAUSE_PRINT));
-    else if (select_print.now == 2) DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, (272 - 8 * 10) / 2, 150, GET_TEXT_F(MSG_STOP_PRINT));
-    DWIN_ICON_Show(ICON, ICON_Confirm_E, 26, 280);
-    DWIN_ICON_Show(ICON, ICON_Cancel_E, 146, 280);
-  }
-  Draw_Select_Highlight(true);
-}
-
-void Draw_Printing_Screen() 
-{
-  if (HMI_IsChinese()) 
-  {
-    DWIN_Frame_AreaCopy(1, 30,  1,  71, 14,  14,   9);  // Tune
-    DWIN_Frame_AreaCopy(1,  0, 72,  63, 86,  41, 188);  // Pause
-    DWIN_Frame_AreaCopy(1, 65, 72, 128, 86, 176, 188);  // Stop
-  }
-  else 
-  {
-    // DWIN_Frame_AreaCopy(1, 40,  2,  92, 14,  14,   9);  // Tune  rock_20211123
-    DWIN_Draw_String(false, false, DWIN_FONT_MENU, Color_White, Color_Bg_Blue, 14, 4, (char*)"Printing");
-    DWIN_Frame_AreaCopy(1,  0, 44,  96, 58,  41, 188);  // 打印时间
-    DWIN_Frame_AreaCopy(1, 98, 44, 152, 56, 176, 188);  // 剩余时间  rock_20211019
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device()){
+      if(laser_device.laser_printing){
+        //DWIN_Frame_TitleCopy(1, 96, 381, 147, 398);// printing
+        DWIN_Frame_TitleCopy(1, 186, 382, 248,397);// Engraving
+      }else{
+        //DWIN_Frame_AreaCopy(1, 4,382,  88,396,  14,   9);  // To be printing
+        DWIN_Frame_AreaCopy(1, 4, 382,  41, 396,  14, 9-1);  // To be
+        DWIN_Frame_AreaCopy(1, 186, 382, 248, 397, 14+38, 9);// Engraving
+      }
+        DWIN_Frame_AreaCopy(1,  151, 43,  219, 59,  41, 188);  // Engraving
+        DWIN_Frame_AreaCopy(1,  62, 43, 97,57,  41+67, 188);  // time
+    }else
+    #endif
+    {
+      DWIN_Frame_AreaCopy(1, 40,  2,  92, 14,  14,   9);  // Tune
+      DWIN_Frame_AreaCopy(1,  0, 44,  96, 58,  41, 188);  // 打印时间
+    }
+    DWIN_Frame_AreaCopy(1, 98, 44, 151, 56, 176, 188);  // 剩余时间
   }
 }
+// 107011 -20210911 开机选择设备
+#if HAS_CUTTER
+void Popup_Window_FdmOrLaser() {
+  Clear_Main_Window();
+  checkkey = Select_Device;
+  DWIN_ICON_Show(ICON, ICON_LOGO, 71, 52);
+  DWIN_ICON_Show(ICON, ICON_MainFdm, 30, 140);
+  DWIN_ICON_Show(ICON, ICON_MainLaser, 30, 261);
+  //Draw_Popup_FDM_Laser();
+  if (HMI_IsChinese()) {
+    DWIN_ICON_Show(ICON, ICON_NozzleType, 50, 100);//请选择您的打印头类型
+    DWIN_Frame_AreaCopy(1, 0,420, 57,436, 130, 184);//容积打印
+    //DWIN_Frame_AreaCopy(1, 58,420, 114,436, 130, 301);//激光打印
+    DWIN_Frame_AreaCopy(1, 58,420, 86,436, 130, 301);//激光
+    DWIN_Frame_AreaCopy(1, 205,423, 233,438, 130+28, 301);//雕刻
+    
+  }
+  else
+  {
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 28, 100, F("Select the tool header type"));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 130, 184, F("FDM"));
+    DWIN_Draw_String(false, false, font8x16, Popup_Text_Color, Color_Bg_Window, 130, 301, F("LASER"));
+  }
 
-void Draw_Print_ProgressBar() 
-{
-  DWIN_ICON_Show(ICON, ICON_Bar, 15, 98);
+  // DWIN_ICON_Show(ICON, ICON_MainFdm, 50, 161);
+  // DWIN_ICON_Show(ICON, ICON_MainLaser, 50, 281);
+  Draw_Main_Sw_Fdm_Laser_Highlight(true);
+  //Draw_Select_Highlight(true);
+}
+#endif //#if HAS_CUTTER
+void Draw_Print_ProgressBar() {
+DWIN_ICON_Show(ICON, ICON_Bar, 15, 98);
   DWIN_Draw_Rectangle(1, BarFill_Color, 16 + _card_percent * 240 / 100, 98, 256, 110); //rock_20210917
   DWIN_Draw_IntValue(true, true, 0, font8x16, Percent_Color, Color_Bg_Black, 3, 109, 133, _card_percent);
   DWIN_Draw_String(false, false, font8x16, Percent_Color, Color_Bg_Black, 133, 133, F("%"));
 }
 
-void Draw_Print_ProgressElapsed() 
+void Draw_Print_ProgressElapsed()
 {
-  bool temp_flash_elapsed_time=false;
-  static bool temp_elapsed_record_flag=true;
+  bool temp_flash_elapsed_time = false;
+  static bool temp_elapsed_record_flag = true;
   duration_t elapsed = print_job_timer.duration(); // print timer
-  if(elapsed.value<360000) //rock_20210903
+  if (elapsed.value < 360000)                      //rock_20210903
   {
-    temp_flash_elapsed_time=false;
+    temp_flash_elapsed_time = false;
     //如果剩余时间》100h，就填充黑色并刷新时间
-    if(temp_elapsed_record_flag!=temp_flash_elapsed_time)
+    if (temp_elapsed_record_flag != temp_flash_elapsed_time)
     {
       Clear_Print_Time();
     }
@@ -1301,19 +2119,19 @@ void Draw_Print_ProgressElapsed()
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 58, 212, F(":"));
     DWIN_Draw_IntValue(true, true, 1, font8x16, Color_White, Color_Bg_Black, 2, 66, 212, (elapsed.value % 3600) / 60);
   }
-  else 
+  else
   {
-    temp_flash_elapsed_time=true;
-    if(temp_elapsed_record_flag!=temp_flash_elapsed_time)
+    temp_flash_elapsed_time = true;
+    if (temp_elapsed_record_flag != temp_flash_elapsed_time)
     {
       Clear_Print_Time();
     }
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 42, 212, F(">100H"));
   }
-  temp_elapsed_record_flag=temp_flash_elapsed_time;
+  temp_elapsed_record_flag = temp_flash_elapsed_time;
 }
 
-void Draw_Print_ProgressRemain() 
+void Draw_Print_ProgressRemain()
 {
   bool temp_flash_remain_time=false;
   static bool temp_record_flag=true;
@@ -1323,41 +2141,51 @@ void Draw_Print_ProgressRemain()
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 176, 212, F("------"));
     return ;
   }
+
+  // if(laser_device.is_laser_device())
+  // {
+  //   Clear_Remain_Time();
+  //   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 176, 212, F("------"));
+  //   return ;
+  // }
+
   if(_remain_time<360000) //rock_20210903
   {
-    temp_flash_remain_time=false;
-    if(temp_record_flag!=temp_flash_remain_time)
+    temp_flash_remain_time = false;
+    if (temp_record_flag != temp_flash_remain_time)
     {
       Clear_Remain_Time();
-    }        
+    }
     DWIN_Draw_IntValue(true, true, 1, font8x16, Color_White, Color_Bg_Black, 2, 176, 212, _remain_time / 3600);
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 192, 212, F(":"));
     DWIN_Draw_IntValue(true, true, 1, font8x16, Color_White, Color_Bg_Black, 2, 200, 212, (_remain_time % 3600) / 60);
   }
-  else 
+  else
   {
-    temp_flash_remain_time=true;
-    if(temp_record_flag!=temp_flash_remain_time)
+    temp_flash_remain_time = true;
+    if (temp_record_flag != temp_flash_remain_time)
     {
       Clear_Remain_Time();
     }
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, 176, 212, F(">100H"));
-  }  
-  temp_record_flag=temp_flash_remain_time;  
+  }
+  temp_record_flag = temp_flash_remain_time;
 }
 
 void Popup_window_Filament(void)
 {
-  DWIN_Draw_Rectangle(1, Color_Bg_Blue,		0,	0,	272,	30);
-  DWIN_Draw_Rectangle(1, Color_Bg_Black,	0,	31,	272,	360);
-  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 271-13, 330);
-  if(HMI_IsChinese())//if(HMI_flag.language)//HMI_IsChinese()
+  DWIN_Draw_Rectangle(1, Color_Bg_Blue, 0, 0, 272, 30);
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, 31, 272, 360);
+  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 271 - 13, 330);
+  if (HMI_IsChinese()) //if(HMI_flag.language)//HMI_IsChinese()
   {
-    DWIN_Frame_AreaCopy(1, 160, 338, 271-36, 479-125, 98, 100);
-    DWIN_Frame_AreaCopy(1, 0, 286, 204, 302, 34, 160);
-    DWIN_Frame_AreaCopy(1, 0, 303, 159, 319, 56, 180);
-    DWIN_Frame_AreaCopy(1, 169, 303, 185, 318, 95, 200);
-    DWIN_Frame_AreaCopy(1, 33, 321, 99, 335, 111, 200);
+    // DWIN_Frame_AreaCopy(1, 160, 338, 271 - 36, 479 - 125, 98, 100);
+    // DWIN_Frame_AreaCopy(1, 0, 286, 204, 302, 34, 160);
+    // DWIN_Frame_AreaCopy(1, 0, 303, 159, 319, 56, 180);
+    // DWIN_Frame_AreaCopy(1, 169, 303, 185, 318, 95, 200);
+    // DWIN_Frame_AreaCopy(1, 33, 321, 99, 335, 111, 200);
+    DWIN_ICON_Show(ICON, FILAMENT_TIPS_C, 14, 99);
+
     DWIN_ICON_Show(ICON, ICON_Confirm_C, 26, 280);
     // DWIN_ICON_Show(ICON, ICON_NoTips_C, 146, 280);
     DWIN_ICON_Show(ICON, ICON_Cancel_C, 146, 280);
@@ -1369,6 +2197,7 @@ void Popup_window_Filament(void)
     DWIN_Draw_String(false,true,font8x16, Popup_Text_Color, Color_Bg_Window, 20, 170, (char*)"please replace the filament,");
     DWIN_Draw_String(false,true,font8x16, Popup_Text_Color, Color_Bg_Window, 20, 190, (char*)"click confirm after finishing");
     DWIN_Draw_String(false,true,font8x16, Popup_Text_Color, Color_Bg_Window, 28, 210, (char*)"replacement, or not prompt.");
+
     DWIN_ICON_Show(ICON, ICON_Confirm_E, 26, 280);
     // DWIN_ICON_Show(ICON, ICON_NoTips_E, 146, 280);
     DWIN_ICON_Show(ICON, ICON_Cancel_E, 146, 280);
@@ -1381,40 +2210,57 @@ void Popup_window_Filament(void)
 
 void Popup_window_Remove_card(void)
 {
-  DWIN_Draw_Rectangle(1, Color_Bg_Blue,		0,	0,	272,	30);
-  DWIN_Draw_Rectangle(1, Color_Bg_Black,	0,	31,	272,	360);
-  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 271-13, 330);
-  if(HMI_IsChinese())//if(HMI_flag.language)
+  DWIN_Draw_Rectangle(1, Color_Bg_Blue, 0, 0, 272, 30);
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, 31, 272, 360);
+  DWIN_Draw_Rectangle(1, Color_Bg_Window, 14, 60, 271 - 13, 330);
+  if (HMI_IsChinese()) //if(HMI_flag.language)
   {
-    DWIN_ICON_Show(ICON, ICON_Card_Remove_C,14, 150);  //显示拔卡异常界面
-    DWIN_Frame_AreaCopy(1, 160, 338, 271-36, 479-125, 98, 100);//溫馨提示
-    DWIN_ICON_Show(ICON, ICON_Confirm_C, 86, 280);     //显示确认按钮
+    DWIN_ICON_Show(ICON, ICON_Confirm_C, 86, 280);                  //显示确认按钮  // 107011 -20211029
+    // DWIN_ICON_Show(ICON, ICON_Card_Remove_C, 14, 150);              //显示拔卡异常界面
+    // DWIN_Frame_AreaCopy(1, 160, 338, 271 - 36, 479 - 125, 98, 100); //溫馨提示
+    DWIN_ICON_Show(ICON, CARD_REMOVE_TIPS_C, 14, 99);
+    //DWIN_ICON_Show(ICON, ICON_Confirm_C, 86, 280);                  //显示确认按钮
     //DWIN_ICON_Show(ICON, ICON_NoTips_C, 146, 280);
   }
   else
-  {   
-    DWIN_ICON_Show(ICON, ICON_Card_Remove_E,14, 150);  //显示拔卡异常界面
-    DWIN_Draw_String(false,true,font8x16, Popup_Text_Color, Color_Bg_Window, 120, 100, (char*)"Tips");  //rock_20210918
-    DWIN_ICON_Show(ICON, ICON_Confirm_E, 86, 280);
+  {
+    DWIN_ICON_Show(ICON, ICON_Confirm_E, 86, 280); //107011 -20211029
+    DWIN_ICON_Show(ICON, ICON_Card_Remove_E, 14, 150);                                                    //显示拔卡异常界面
+    DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, 120, 100, (char *)"Tips"); //rock_20210918
+    //DWIN_ICON_Show(ICON, ICON_Confirm_E, 86, 280);
   }
 
   DWIN_Draw_Rectangle(0, Select_Color, 85, 279, 186, 318);
   DWIN_Draw_Rectangle(0, Select_Color, 84, 278, 187, 319);
 }
-void Goto_PrintProcess() 
+void Goto_PrintProcess()
 {
   checkkey = PrintProcess;
   Clear_Main_Window();
   Draw_Printing_Screen();
   ICON_Tune();
   // if (printingIsPaused()&& !HMI_flag.cloud_printing_flag) ICON_Continue(); 
-  if (printingIsPaused()) ICON_Continue(); 
-  // else if(HMI_flag.cloud_printing_flag && HMI_flag.filement_resume_flag)ICON_Continue(); 
-  else   ICON_Pause();
+  // if (printingIsPaused()) ICON_Continue(); 
+  // // else if(HMI_flag.cloud_printing_flag && HMI_flag.filement_resume_flag)ICON_Continue(); 
+  // else   ICON_Pause();
+  // ICON_Stop();
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) {
+      if(laser_device.laser_printing) ICON_Pause();
+      else ICON_Continue();
+    }else
+  #endif 
+  {
+    if (printingIsPaused()) ICON_Continue(); 
+    // else if(HMI_flag.cloud_printing_flag && HMI_flag.filement_resume_flag)ICON_Continue(); 
+    else  ICON_Pause();
+  }
   ICON_Stop();
+
   // Copy into filebuf string before entry
 
   char * const name = card.longest_filename();
+
   const int8_t npos = _MAX(0U, DWIN_WIDTH - strlen(name) * MENU_CHR_W) / 2;
   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, npos, 60, name);
 
@@ -1423,33 +2269,61 @@ void Goto_PrintProcess()
   
   _card_percent = card.percentDone();
   Draw_Print_ProgressBar();
-  Draw_Print_ProgressElapsed();  //显示当前时间
-  Draw_Print_ProgressRemain();   //显示剩余时间
+  Draw_Print_ProgressElapsed(); //显示当前时间
+  Draw_Print_ProgressRemain();  //显示剩余时间
 }
 
-void Goto_MainMenu() 
+void Goto_MainMenu()
 {
   checkkey = MainMenu;
   Clear_Main_Window();
-  if (HMI_IsChinese()) 
+  if (HMI_IsChinese())
   {
-    DWIN_Frame_AreaCopy(1, 2, 2, 27, 14, 14, 9); // "Home"
-  }
-  else {
-    #ifdef USE_STRING_HEADINGS
-      Draw_Title(GET_TEXT_F(MSG_MAIN));
-    #else
-      DWIN_Frame_AreaCopy(1, 0, 2, 39, 12, 14, 9);
+    #if HAS_CUTTER
+      if (laser_device.is_laser_device()){               // 107011 -20210924
+        //DWIN_Frame_AreaCopy(1, 87, 30, 143, 45, 14, 9); // 激光打印
+        DWIN_Frame_AreaCopy(1, 87, 30, 114, 45, 14, 9); // 激光
+        DWIN_Frame_AreaCopy(1, 234,30, 262, 45, 14+28, 9); // 雕刻
+      }else
     #endif
+    {
+      DWIN_Frame_AreaCopy(1, 2, 2, 27, 14, 14, 9); // "Home"
+    }
+  }
+  else
+  {
+#if HAS_CUTTER
+    if (laser_device.is_laser_device()) // 107011 -20210924
+    {
+      DWIN_Frame_AreaCopy(1, 166, 437, 212, 449, 14, 9); //laser
+    }
+    else
+#endif
+    {
+#ifdef USE_STRING_HEADINGS
+      Draw_Title(GET_TEXT_F(MSG_MAIN));
+#else
+      DWIN_Frame_AreaCopy(1, 0, 2, 39, 12, 14, 9);
+#endif
+    }
   }
 
   DWIN_ICON_Show(ICON, ICON_LOGO, 71, 52);
+
   ICON_Print();
   ICON_Prepare();
   ICON_Control();
-  TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(select_page.now == 3);
+  // 107011 -20210924
+  #if HAS_CUTTER
+  if(laser_device.is_laser_device())
+  {
+    ICON_AutoHome();
+  }else 
+ #endif
+ {
+   TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(select_page.now == 3);
+ }
 }
-
 inline ENCODER_DiffState get_encoder_state() {
   static millis_t Encoder_ms = 0;
   const millis_t ms = millis();
@@ -1458,74 +2332,536 @@ inline ENCODER_DiffState get_encoder_state() {
   if (state != ENCODER_DIFF_NO) Encoder_ms = ms + ENCODER_WAIT_MS;
   return state;
 }
-
-void HMI_Plan_Move(const feedRate_t fr_mm_s) {
-  if (!planner.is_full()) {
+void HMI_Plan_Move(const feedRate_t fr_mm_s)
+{
+  if (!planner.is_full())
+  {
     planner.synchronize();
     planner.buffer_line(current_position, fr_mm_s, active_extruder);
     DWIN_UpdateLCD();
   }
 }
-void HMI_Move_Done(const AxisEnum axis) 
+void HMI_Move_Done(const AxisEnum axis)
+{
+  EncoderRate.enabled = false;
+  planner.synchronize();
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) 
+      checkkey = LaserAxisMove;
+    else 
+  #endif
+  { 
+    checkkey = AxisMove;
+  }
+  DWIN_UpdateLCD();
+}
+#if HAS_CUTTER // 107011 激光模式
+//107011- 20210910 激光模式下移动完成
+void HMI_Tune_Move_Done(const AxisEnum axis)
 {
   // EncoderRate.enabled = false;  //rock_20211120    
   planner.synchronize();
-  checkkey = AxisMove;
+  checkkey = Laser_Tune;
   DWIN_UpdateLCD();
 }
+
+//107011 -20210910 激光模式下移动X轴
+void HMI_Tune_Move_X()
+{
+  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_X_scaled)){
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
+      return HMI_Tune_Move_Done(X_AXIS);
+    }
+    LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
+    current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
+    DWIN_UpdateLCD();
+    HMI_Plan_Move(homing_feedrate(X_AXIS));
+  }
+}
+void HMI_Tune_Move_Y()
+{
+  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_Y_scaled)){
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+      return HMI_Tune_Move_Done(Y_AXIS);
+    }
+    LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
+    current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+
+    DWIN_UpdateLCD();
+    HMI_Plan_Move(homing_feedrate(Y_AXIS));
+  }
+}
+void HMI_Tune_Move_Z()
+{
+  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_Z_scaled))
+    {
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
+      return HMI_Tune_Move_Done(Z_AXIS);
+    }
+    
+    LIMIT(HMI_ValueStruct.Move_Z_scaled, (Z_AXIS_OFFSET_RANGE_MIN) * MINUNITMULT, (Z_MAX_POS-100) * MINUNITMULT);
+    current_position.z = HMI_ValueStruct.Move_Z_scaled / MINUNITMULT;
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
+    DWIN_UpdateLCD();
+    HMI_Plan_Move(homing_feedrate(Z_AXIS));
+  }
+}
+// 激光模式，跑边框
+void HMI_Area_Move(bool flush)
+{
+  //if (EncoderRate.enabled) return; //跑边框未完成，不允许再次跑边框 107011 -20211009
+
+  laser_device.is_run_range =true; //标志正在跑边框
+
+  EncoderRate.enabled = true;
+  float y = laser_device.get_laser_range(LASER_MAX_Y) - laser_device.get_laser_range(LASER_MIN_Y);
+  float x = laser_device.get_laser_range(LASER_MAX_X) - laser_device.get_laser_range(LASER_MIN_X);
+  float origin_position_x = current_position.x, origin_position_y = current_position.y; // 记录当前位置
+
+
+  HMI_ValueStruct.Move_X_scaled = current_position.x*MINUNITMULT;
+  HMI_ValueStruct.Move_Y_scaled = current_position.y*MINUNITMULT;
+
+  HMI_ValueStruct.Move_X_scaled += laser_device.get_laser_range(LASER_MIN_X)*MINUNITMULT;
+  HMI_ValueStruct.Move_Y_scaled += laser_device.get_laser_range(LASER_MIN_Y)*MINUNITMULT;
+
+  LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
+  LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
+  current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
+  current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
+
+  // 超出打印区域
+  if(current_position.x+x > X_MAX_POS) x = X_MAX_POS - current_position.x;
+  if(current_position.y+y > Y_MAX_POS) y = Y_MAX_POS - current_position.y;
+
+  //先跑到最小位置
+  // current_position.x += laser_device.get_laser_range(LASER_MIN_X);
+  // current_position.y += laser_device.get_laser_range(LASER_MIN_Y);
+
+  HMI_Plan_Move(homing_feedrate(Y_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), current_position.y * 10);
+    DWIN_UpdateLCD();
+  }
+
+  //current_position.y += y;
+  HMI_ValueStruct.Move_Y_scaled += y*MINUNITMULT;
+  LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
+  current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
+
+  laser_device.laser_power_start(5);
+  HMI_Plan_Move(homing_feedrate(Y_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), current_position.y * 10);
+    DWIN_UpdateLCD();
+  }
+
+  //current_position.x += x;
+  HMI_ValueStruct.Move_X_scaled += x*MINUNITMULT;
+  LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
+  current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
+
+  HMI_Plan_Move(homing_feedrate(X_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * 10);
+    DWIN_UpdateLCD();
+  }
+  //current_position.y -= y;
+  HMI_ValueStruct.Move_Y_scaled -= y*MINUNITMULT;
+  LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
+  current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
+
+  HMI_Plan_Move(homing_feedrate(Y_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), current_position.y * 10);
+    DWIN_UpdateLCD();
+  }
+
+  //current_position.x -= x;
+    HMI_ValueStruct.Move_X_scaled -= x*MINUNITMULT;
+  LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
+  current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
+
+  HMI_Plan_Move(homing_feedrate(X_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * 10);
+    DWIN_UpdateLCD();
+  }
+
+  laser_device.laser_power_stop(); //关闭激光
+
+  //回到原点位置 107011 -20211009
+  // current_position.x = origin_position_x;
+  // current_position.y = origin_position_y;
+  HMI_ValueStruct.Move_X_scaled = origin_position_x*MINUNITMULT;
+  HMI_ValueStruct.Move_Y_scaled = origin_position_y*MINUNITMULT;
+  LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
+  LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
+
+  current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
+  current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
+
+  HMI_Plan_Move(homing_feedrate(X_AXIS));
+  planner.synchronize();
+  if (flush && checkkey == Laser_Tune)
+  {
+    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * 10);
+    DWIN_UpdateLCD();
+  }
+  EncoderRate.enabled = false;
+  laser_device.is_run_range =false;
+
+}
+
+//107011 -20210926
+// 打印中
+void Draw_Printing_Title()
+{
+  if (HMI_IsChinese())
+  {
+    //DWIN_Frame_TitleCopy(1, 191, 30, 235, 45);
+    DWIN_Frame_AreaCopy(1, 234, 30, 262, 45, 14, 9); // 雕刻
+    DWIN_Frame_AreaCopy(1, 219, 30, 233, 45, 14+28, 9); // 中
+  }
+  else
+  {
+    //DWIN_Frame_TitleCopy(1, 96, 381, 147, 398);
+    DWIN_Frame_TitleCopy(1, 186, 382, 248,397);// Engraving
+  }
+}
+void Draw_Print_File_Menu();
+//test_current 激光模式, 打印安全警告
+void HMI_Laser_Print_Warning()
+{
+ ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_page.inc(4)) {
+		  Draw_Print_Warning_Highlight(select_page.now);
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+  {
+    if (select_page.dec())
+    {
+      Draw_Print_Warning_Highlight(select_page.now);
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    switch (select_page.now)
+    {
+      case 0://设置
+        checkkey = Laser_Tune;
+        Draw_Tune_Laser_Menu();
+        Draw_Laser_Status_Area(true);
+      break;
+
+      case 1:
+        if(laser_device.is_run_range) break;
+        laser_device.already_show_warning = true;// 已经显示过警告界面， 本次雕刻不要再显示。
+        laser_device.laser_printing = true; // 雕刻中 107011 -20211029
+
+        Draw_Laser_Status_Area(true);
+        ICON_Pause();
+        checkkey = PrintProcess;
+        select_print.set(2);
+
+        Clear_Menu_Area();
+        Goto_PrintProcess();
+        // Clear_Title_Bar();
+        // Draw_Printing_Title(); // 107011 -20210926 打印中
+        char cmd[40];
+        cmd[0] = '\0';
+        #if BOTH(HAS_HEATED_BED, PAUSE_HEAT)
+        //if (resume_bed_temp) sprintf_P(cmd, PSTR("M190 S%i\n"), resume_bed_temp); //rock_20210901
+        #endif
+        #if BOTH(HAS_HOTEND, PAUSE_HEAT)
+        //if (resume_hotend_temp) sprintf_P(&cmd[strlen(cmd)], PSTR("M109 S%i\n"), resume_hotend_temp);
+        #endif
+        
+        strcat_P(cmd, M24_STR);
+        queue.inject(cmd);
+        //SERIAL_ECHOLNPAIR("laser_device.remain_time: ",laser_device.remain_time);
+        break;
+      case 2://跑边框
+        if(laser_device.is_run_range) break;
+        HMI_Area_Move(false);
+        break;
+      case 3: //返回
+        // checkkey = PrintProcess;
+        // select_print.set(1);
+        // Clear_Menu_Area();
+        // Draw_Laser_Status_Area(true);
+        // Goto_PrintProcess();
+        checkkey = SelectFile;
+        IF_DISABLED(NO_SD_AUTOSTART, card.autofile_cancel());
+        card.abortFilePrintNow(TERN_(SD_RESORT, true));
+        queue.clear();
+        print_job_timer.abort();
+        HMI_flag.cutting_line_flag=false;
+        HMI_flag.remove_card_flag=false;
+        HMI_flag.pause_flag=false;
+
+        select_file.reset();
+        Clear_Menu_Area();
+        Draw_Laser_Status_Area(true);
+        Draw_Print_File_Menu();
+        break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+
+
+//107011 -20210910 激光模式下移动X轴
+void HMI_Focus_Move_Z()
+{
+  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_Z_scaled)){
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 200, 236, HMI_ValueStruct.Move_Z_scaled);
+      checkkey = Laser_Focus;
+      EncoderRate.enabled = false;
+      planner.synchronize();
+      DWIN_UpdateLCD();
+      return ;
+    }
+    //LIMIT(HMI_ValueStruct.Move_Z_scaled, (Z_MIN_POS)*MINUNITMULT, (Z_MAX_POS)*MINUNITMULT);
+    current_position.z = HMI_ValueStruct.Move_Z_scaled / MINUNITMULT;
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 200, 236, HMI_ValueStruct.Move_Z_scaled);
+    DWIN_UpdateLCD();
+    HMI_Plan_Move(homing_feedrate(Z_AXIS));
+  }
+}
+//107011 -20210918
+// 激光/FDM 切换警告
+void HMI_Laser_Fdm_Sw_Warning()
+{
+ ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_laser_fdm.inc(2)) {
+      switch (select_laser_fdm.now) {
+        case 0: Draw_Sw_Warning_Highlight(true); break;
+        case 1: Draw_Sw_Warning_Highlight(false); break;
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW) {
+    if (select_laser_fdm.dec()) {
+      switch (select_laser_fdm.now) {
+        case 0: Draw_Sw_Warning_Highlight(true); break;
+        case 1: Draw_Sw_Warning_Highlight(false); break;
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+    switch(select_laser_fdm.now)
+    {
+        case 0: // 确定
+          index_control = MROWS;
+				if(laser_device.is_laser_device()){ //激光切回FDM
+          laser_device.set_current_device(DEVICE_FDM); //设置 当前机器为FDM，并且保存EEPROM
+          laser_device.laser_power_close();// 关闭软pwm中断，停止激光输出,避免影响到FDM打印 107011-20211013
+          checkkey = Control;
+          select_control.set(CONTROL_CASE_SW_LASER);
+          queue.inject_P(PSTR("M999")); // 107011 -20211013
+          Clear_Status_Area();
+        	Draw_Control_Menu();
+          Draw_Status_Area(true);
+				}else{ //FDM 切激光
+          checkkey = Laser_Focus;
+
+          laser_device.set_current_device(DEVICE_LASER);
+          // thermalManager.disable_all_heaters(); // 关闭加热107011 -20211012
+
+          // checkkey = Laser_Control;
+          select_control.set(CONTROL_LASER_CASE_FDM);
+          laser_device.laser_power_open(); // 打开激光, 以最弱的激光输出
+          queue.inject_P(PSTR("M999")); // 107011 -20211013
+          Clear_Status_Area();
+          //Draw_Laser_Control_Menu();
+          Draw_Laser_Status_Area(true);
+          Draw_Laser_Focus();
+          
+      }
+      break;
+        
+		case 1: // 返回
+			#if HAS_CUTTER  
+				if(laser_device.is_laser_device()){
+					checkkey = Laser_Control;
+					Draw_Laser_Control_Menu();
+				}else
+			#endif
+			{
+				checkkey = Control;
+				Draw_Control_Menu();
+			}
+        break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+
+//107011 -20211122
+//激光聚焦
+void HMI_Laser_Focus()
+{
+ ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_laser_fdm.inc(2)) {
+      switch (select_laser_fdm.now) {
+        case 0: Draw_Laser_Focus_Highlight(0); break;
+        case 1: Draw_Laser_Focus_Highlight(1); break;
+        // case 2: Draw_Laser_Focus_Highlight(2); break;
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW) {
+    if (select_laser_fdm.dec()) {
+      switch (select_laser_fdm.now) {
+        case 0: Draw_Laser_Focus_Highlight(0); break;
+        case 1: Draw_Laser_Focus_Highlight(1); break;
+        //case 2: Draw_Laser_Focus_Highlight(2); break;
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+    switch(select_laser_fdm.now)
+    {
+      case 0://Z轴调整
+        //checkkey = HMI_AxisMove;
+        checkkey = Laser_Focus_Move_Z;
+        HMI_ValueStruct.Move_Z_scaled = current_position.z * MINUNITMULT;
+        DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 200, 236, HMI_ValueStruct.Move_Z_scaled);
+      break;
+
+      case 1: // 完成
+        //index_control = MROWS;//FDM 切激光
+        laser_device.set_current_device(DEVICE_LASER);
+        thermalManager.disable_all_heaters(); // 关闭加热107011 -20211012
+
+        //checkkey = Laser_Control;
+        //select_control.set(CONTROL_LASER_CASE_FDM);
+        laser_device.laser_power_open(); // 打开激光, 以最弱的激光输出
+        queue.inject_P(PSTR("M999\nG92.9 Z0")); // 107011 -20211013
+        //Clear_Status_Area();
+        //Draw_Laser_Control_Menu();
+        //Draw_Laser_Status_Area(true);
+        settings.reset();
+        select_page.reset();
+        Goto_MainMenu();
+        Draw_Laser_Status_Area(true);
+        laser_device.save_z_axis_high_to_eeprom(0);// 完成按钮回将当前的Z轴设为0
+      break;
+        
+		 case 2: // 返回——>FDM控制页面
+			// #if HAS_CUTTER  
+			// 	if(laser_device.is_laser_device()){
+			// 		checkkey = Laser_Control;
+			// 		Draw_Laser_Control_Menu();
+			// 	}else
+			// #endif
+			{
+				checkkey = Control;
+				Draw_Control_Menu();
+			}
+     break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+
+#endif //#if HAS_CUTTER
+
 
 void HMI_Move_X() 
 {
   ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
-  if (encoder_diffState != ENCODER_DIFF_NO) 
+  if (encoder_diffState != ENCODER_DIFF_NO)
   {
     if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_X_scaled))
     {
-      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216,  MBASE(1), HMI_ValueStruct.Move_X_scaled);
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
       return HMI_Move_Done(X_AXIS);
-    }      
-    LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS) * MINUNITMULT, (X_MAX_POS) * MINUNITMULT);
+    }
+    LIMIT(HMI_ValueStruct.Move_X_scaled, (X_MIN_POS)*MINUNITMULT, (X_MAX_POS)*MINUNITMULT);
     current_position.x = HMI_ValueStruct.Move_X_scaled / MINUNITMULT;
-    DWIN_Draw_Signed_Float(font8x16,Select_Color, 3, UNITFDIGITS, 216,  MBASE(1), HMI_ValueStruct.Move_X_scaled);
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
     DWIN_UpdateLCD();
     HMI_Plan_Move(homing_feedrate(X_AXIS));
   }
 }
 
-
-void HMI_Move_Y() {
+void HMI_Move_Y()
+{
   ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
-  if (encoder_diffState != ENCODER_DIFF_NO) 
+  if (encoder_diffState != ENCODER_DIFF_NO)
   {
     if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_Y_scaled))
     {
-        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
-        return HMI_Move_Done(Y_AXIS);
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+      return HMI_Move_Done(Y_AXIS);
     }
-      
-    LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS) * MINUNITMULT, (Y_MAX_POS) * MINUNITMULT);
+
+    LIMIT(HMI_ValueStruct.Move_Y_scaled, (Y_MIN_POS)*MINUNITMULT, (Y_MAX_POS)*MINUNITMULT);
     current_position.y = HMI_ValueStruct.Move_Y_scaled / MINUNITMULT;
-    DWIN_Draw_Signed_Float(font8x16,Select_Color, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);  
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
     DWIN_UpdateLCD();
     HMI_Plan_Move(homing_feedrate(Y_AXIS));
   }
 }
 
-
-void HMI_Move_Z() 
-{  
-  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();   
-  if (encoder_diffState != ENCODER_DIFF_NO) 
+void HMI_Move_Z()
+{
+  ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
+  if (encoder_diffState != ENCODER_DIFF_NO)
   {
-    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);   
+    DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
     if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Move_Z_scaled))
     {
       DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
       return HMI_Move_Done(Z_AXIS);
-    }      
-    LIMIT(HMI_ValueStruct.Move_Z_scaled, (Z_AXIS_OFFSET_RANGE_MIN) * MINUNITMULT, (Z_MAX_POS) * MINUNITMULT);   //rock_20211025 修改轴移动界面不能移动到负值，防止撞击
+    }
+
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device())
+    {
+        LIMIT(HMI_ValueStruct.Move_Z_scaled, (Z_AXIS_OFFSET_RANGE_MIN) * MINUNITMULT, (LASER_Z_AXIS_HIGH_MAX) * MINUNITMULT);
+    }else
+    #endif
+    {
+      // 挤出机时计算软限位
+      LIMIT(HMI_ValueStruct.Move_Z_scaled, (Z_AXIS_OFFSET_RANGE_MIN) * MINUNITMULT, (Z_MAX_POS) * MINUNITMULT);   //rock_20211025 修改轴移动界面不能移动到负值，防止撞击
+    }
+
     current_position.z = HMI_ValueStruct.Move_Z_scaled / MINUNITMULT;
-   
+
     DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
     DWIN_UpdateLCD();
     HMI_Plan_Move(homing_feedrate(Z_AXIS));
@@ -1534,7 +2870,7 @@ void HMI_Move_Z()
 
 #if HAS_HOTEND
 
-  void HMI_Move_E() {
+ void HMI_Move_E() {
     static float last_E_scaled = 0;
     ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
     if (encoder_diffState != ENCODER_DIFF_NO) 
@@ -1751,10 +3087,13 @@ void HMI_PrintSpeed() {
 
 #define LAST_AXIS TERN(HAS_HOTEND, E_AXIS, Z_AXIS)
 
-void HMI_MaxFeedspeedXYZE() {
+void HMI_MaxFeedspeedXYZE()
+{
   ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
-  if (encoder_diffState != ENCODER_DIFF_NO) {
-    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Feedspeed)) {
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Feedspeed))
+    {
       checkkey = MaxSpeed;
       EncoderRate.enabled = false;
       if (WITHIN(HMI_flag.feedspeed_axis, X_AXIS, LAST_AXIS))
@@ -1771,20 +3110,26 @@ void HMI_MaxFeedspeedXYZE() {
   }
 }
 
-void HMI_MaxAccelerationXYZE() {
+void HMI_MaxAccelerationXYZE()
+{
   ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
-  if (encoder_diffState != ENCODER_DIFF_NO) {
-    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Acceleration)) {
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Acceleration))
+    {
       checkkey = MaxAcceleration;
       EncoderRate.enabled = false;
-      if (WITHIN(HMI_flag.acc_axis, X_AXIS, LAST_AXIS))
+      if (WITHIN(HMI_flag.acc_axis, X_AXIS, LAST_AXIS)){
         planner.set_max_acceleration(HMI_flag.acc_axis, HMI_ValueStruct.Max_Acceleration);
+      }
+
       DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(select_acc.now), HMI_ValueStruct.Max_Acceleration);
       return;
     }
     // MaxAcceleration limit
     if (WITHIN(HMI_flag.acc_axis, X_AXIS, LAST_AXIS))
       NOMORE(HMI_ValueStruct.Max_Acceleration, default_max_acceleration[HMI_flag.acc_axis] * 2);
+    
     if (HMI_ValueStruct.Max_Acceleration < MIN_MAXACCELERATION) HMI_ValueStruct.Max_Acceleration = MIN_MAXACCELERATION;
     // MaxAcceleration value
     DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Select_Color, 4, 210, MBASE(select_acc.now), HMI_ValueStruct.Max_Acceleration);
@@ -1821,10 +3166,13 @@ void HMI_MaxAccelerationXYZE() {
 
 #endif // HAS_CLASSIC_JERK
 
-void HMI_StepXYZE() {
+void HMI_StepXYZE()
+{
   ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
-  if (encoder_diffState != ENCODER_DIFF_NO) {
-    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Step_scaled)) {
+  if (encoder_diffState != ENCODER_DIFF_NO)
+  {
+    if (Apply_Encoder(encoder_diffState, HMI_ValueStruct.Max_Step_scaled))
+    {
       checkkey = Step;
       EncoderRate.enabled = false;
       if (WITHIN(HMI_flag.step_axis, X_AXIS, LAST_AXIS))
@@ -1842,36 +3190,40 @@ void HMI_StepXYZE() {
 }
 
 // Draw X, Y, Z and blink if in an un-homed or un-trusted state
-void _update_axis_value(const AxisEnum axis, const uint16_t x, const uint16_t y, const bool blink, const bool force) {
+void _update_axis_value(const AxisEnum axis, const uint16_t x, const uint16_t y, const bool blink, const bool force)
+{
   const bool draw_qmark = axis_should_home(axis),
              draw_empty = NONE(HOME_AFTER_DEACTIVATE, DISABLE_REDUCED_ACCURACY_WARNING) && !draw_qmark && !axis_is_trusted(axis);
 
   // Check for a position change
-  static xyz_pos_t oldpos = { -1, -1, -1 };
+  static xyz_pos_t oldpos = {-1, -1, -1};
   const float p = current_position[axis];
   const bool changed = oldpos[axis] != p;
   if (changed) oldpos[axis] = p;
 
-  if (force || changed || draw_qmark || draw_empty) {
+  if (force || changed || draw_qmark || draw_empty)
+  {
     if (blink && draw_qmark)
       DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, x, y, F("???.?"));
     else if (blink && draw_empty)
       DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, x, y, F("     "));
     else
-    // DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 1, x, y, p * 10);
-    // DWIN_Draw_Signed_Float(uint8_t size, uint16_t bColor, uint8_t iNum, uint8_t fNum, uint16_t x, uint16_t y, long value)
-    DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, x, y, p * 10);
+      // DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 1, x, y, p * 10);
+      // DWIN_Draw_Signed_Float(uint8_t size, uint16_t bColor, uint8_t iNum, uint8_t fNum, uint16_t x, uint16_t y, long value)
+      DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, x, y, p * 10);
   }
 }
 
-void _draw_xyz_position(const bool force) {
+void _draw_xyz_position(const bool force)
+{
   //SERIAL_ECHOPGM("Draw XYZ:");
   static bool _blink = false;
   const bool blink = !!(millis() & 0x400UL);
-  if (force || blink != _blink) {
+  if (force || blink != _blink)
+  {
     _blink = blink;
     //SERIAL_ECHOPGM(" (blink)");
-    _update_axis_value(X_AXIS,  35, 459, blink, true);
+    _update_axis_value(X_AXIS, 35, 459, blink, true);
     _update_axis_value(Y_AXIS, 120, 459, blink, true);
     _update_axis_value(Z_AXIS, 205, 459, blink, true);
   }
@@ -2002,36 +3354,37 @@ void update_variable()
     if (_new_fanspeed) _fanspeed = thermalManager.fan_speed[0];
   #endif
 
-  if (checkkey == Tune) 
+  if (checkkey == Tune)
   {
-    // Tune page temperature update
-    #if HAS_HOTEND
-      if (_new_hotend_target)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_TEMP + MROWS - index_tune), _hotendtarget);
-    #endif
-    #if HAS_HEATED_BED
-      if (_new_bed_target)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_BED + MROWS - index_tune), _bedtarget);
-    #endif
-    #if HAS_FAN
-      if (_new_fanspeed)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_FAN + MROWS - index_tune), _fanspeed);
-    #endif
+// Tune page temperature update
+#if HAS_HOTEND
+    if (_new_hotend_target)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_TEMP + MROWS - index_tune), _hotendtarget);
+#endif
+#if HAS_HEATED_BED
+    if (_new_bed_target)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_BED + MROWS - index_tune), _bedtarget);
+#endif
+#if HAS_FAN
+    if (_new_fanspeed)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TUNE_CASE_FAN + MROWS - index_tune), _fanspeed);
+#endif
   }
-  else if (checkkey == TemperatureID) {
-    // Temperature page temperature update
-    #if HAS_HOTEND
-      if (_new_hotend_target)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_TEMP), _hotendtarget);
-    #endif
-    #if HAS_HEATED_BED
-      if (_new_bed_target)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_BED), _bedtarget);
-    #endif
-    #if HAS_FAN
-      if (_new_fanspeed)
-        DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_FAN), _fanspeed);
-    #endif
+  else if (checkkey == TemperatureID)
+  {
+// Temperature page temperature update
+#if HAS_HOTEND
+    if (_new_hotend_target)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_TEMP), _hotendtarget);
+#endif
+#if HAS_HEATED_BED
+    if (_new_bed_target)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_BED), _bedtarget);
+#endif
+#if HAS_FAN
+    if (_new_fanspeed)
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(TEMP_CASE_FAN), _fanspeed);
+#endif
   }
 
   // Bottom temperature update
@@ -2078,34 +3431,48 @@ void update_variable()
   #endif
 
   static int16_t _feedrate = 100;
-  if (_feedrate != feedrate_percentage) {
+  if (_feedrate != feedrate_percentage)
+  {
     _feedrate = feedrate_percentage;
     DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 116 + 2 * STAT_CHR_W, 384, _feedrate);
   }
 
-  #if HAS_FAN
-    if (_new_fanspeed) {
-      _fanspeed = thermalManager.fan_speed[0];
-      DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 195 + 2 * STAT_CHR_W, 384, _fanspeed);
-    }
-  #endif
+#if HAS_FAN
+  if (_new_fanspeed)
+  {
+    _fanspeed = thermalManager.fan_speed[0];
+    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 195 + 2 * STAT_CHR_W, 384, _fanspeed);
+  }
+#endif
 
   static float _offset = 0;
-  if (BABY_Z_VAR != _offset) {
+  if (BABY_Z_VAR != _offset)
+  {
     _offset = BABY_Z_VAR;
-    if (BABY_Z_VAR < 0) {
+    if (BABY_Z_VAR < 0)
+    {
       DWIN_Draw_FloatValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 2, 2, 207, 417, -_offset * 100);
       DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, 205, 419, F("-"));
     }
-    else {
+    else
+    {
       DWIN_Draw_FloatValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 2, 2, 207, 417, _offset * 100);
       DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, 205, 419, F(" "));
     }
   }
-
   _draw_xyz_position(false);
 }
-
+//107011 -20210915
+void update_laser_variable()
+{
+  static int16_t _feedrate = 100;
+  if (_feedrate != feedrate_percentage)
+  {
+    _feedrate = feedrate_percentage;
+    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 116 + 2 * STAT_CHR_W, 384, _feedrate);
+  }
+  _draw_xyz_position(false);
+}
 /**
  * Read and cache the working directory.
  *
@@ -2113,20 +3480,17 @@ void update_variable()
  * and rely on Marlin caching for performance. No need to
  * cache files here.
  */
-
 #ifndef strcasecmp_P
-  #define strcasecmp_P(a, b) strcasecmp((a), (b))
+#define strcasecmp_P(a, b) strcasecmp((a), (b))
 #endif
-
-void make_name_without_ext(char *dst, char *src, size_t maxlen=MENU_CHAR_LIMIT) {
-  char * const name = card.longest_filename();
-  size_t pos        = strlen(name); // index of ending nul
-
+void make_name_without_ext(char *dst, char *src, size_t maxlen = MENU_CHAR_LIMIT)
+{
+  char *const name = card.longest_filename();
+  size_t pos = strlen(name); // index of ending nul
   // For files, remove the extension
   // which may be .gcode, .gco, or .g
   if (!card.flag.filenameIsDir)
     while (pos && src[pos] != '.') pos--; // find last '.' (stop at 0)
-
   size_t len = pos;   // nul or '.'
   if (len > maxlen) {           // Keep the name short
     pos        = len = maxlen; // move nul down
@@ -2134,45 +3498,40 @@ void make_name_without_ext(char *dst, char *src, size_t maxlen=MENU_CHAR_LIMIT) 
     dst[--pos] = '.';
     dst[--pos] = '.';
   }
-
-  dst[len] = '\0';    // end it
-
+  dst[len] = '\0'; // end it
   // Copy down to 0
   while (pos--) dst[pos] = src[pos];
 }
-
 void HMI_SDCardInit() { card.cdroot(); }
-
-void MarlinUI::refresh() { /* Nothing to see here */ }
-
+void MarlinUI::refresh()
+{ /* Nothing to see here */
+}
 #define ICON_Folder ICON_More
-
 #if ENABLED(SCROLL_LONG_FILENAMES)
-
-  char shift_name[LONG_FILENAME_LENGTH + 1];
-  int8_t shift_amt; // = 0
-  millis_t shift_ms; // = 0
-
-  // Init the shift name based on the highlighted item
-  void Init_Shift_Name() {
-    const bool is_subdir = !card.flag.workDirIsRoot;
-    const int8_t filenum = select_file.now - 1 - is_subdir; // Skip "Back" and ".."
-    const uint16_t fileCnt = card.get_num_Files();
-    if (WITHIN(filenum, 0, fileCnt - 1)) {
-      card.getfilename_sorted(SD_ORDER(filenum, fileCnt));
-      char * const name = card.longest_filename();
-      make_name_without_ext(shift_name, name, 100);
-    }
+char shift_name[LONG_FILENAME_LENGTH + 1];
+int8_t shift_amt;  // = 0
+millis_t shift_ms; // = 0
+// Init the shift name based on the highlighted item
+void Init_Shift_Name()
+{
+  const bool is_subdir = !card.flag.workDirIsRoot;
+  const int8_t filenum = select_file.now - 1 - is_subdir; // Skip "Back" and ".."
+  const uint16_t fileCnt = card.get_num_Files();
+  if (WITHIN(filenum, 0, fileCnt - 1))
+  {
+    card.getfilename_sorted(SD_ORDER(filenum, fileCnt));
+    char *const name = card.longest_filename();
+    make_name_without_ext(shift_name, name, 100);
   }
-
-  void Init_SDItem_Shift() {
-    shift_amt = 0;
-    shift_ms  = select_file.now > 0 && strlen(shift_name) > MENU_CHAR_LIMIT
-           ? millis() + 750UL : 0;
-  }
-
+}
+void Init_SDItem_Shift()
+{
+  shift_amt = 0;
+  shift_ms = select_file.now > 0 && strlen(shift_name) > MENU_CHAR_LIMIT
+                 ? millis() + 750UL
+                 : 0;
+}
 #endif
-
 /**
  * Display an SD item, adding a CDUP for subfolders.
  */
@@ -2183,61 +3542,50 @@ void Draw_SDItem(const uint16_t item, int16_t row=-1) {
     Draw_Menu_Line(row, ICON_Folder, "..");
     return;
   }
-
   card.getfilename_sorted(SD_ORDER(item - is_subdir, card.get_num_Files()));
-  char * const name = card.longest_filename();
-
-  #if ENABLED(SCROLL_LONG_FILENAMES)
-    // Init the current selected name
-    // This is used during scroll drawing
-    if (item == select_file.now - 1) {
-      make_name_without_ext(shift_name, name, 100);
-      Init_SDItem_Shift();
-    }
-  #endif
-
+  char *const name = card.longest_filename();
+#if ENABLED(SCROLL_LONG_FILENAMES)
+  // Init the current selected name
+  // This is used during scroll drawing
+  if (item == select_file.now - 1)
+  {
+    make_name_without_ext(shift_name, name, 100);
+    Init_SDItem_Shift();
+  }
+#endif
   // Draw the file/folder with name aligned left
   char str[strlen(name) + 1];
   make_name_without_ext(str, name);
   Draw_Menu_Line(row, card.flag.filenameIsDir ? ICON_Folder : ICON_File, str);
 }
-
 #if ENABLED(SCROLL_LONG_FILENAMES)
-
-  void Draw_SDItem_Shifted(uint8_t &shift) {
-    // Limit to the number of chars past the cutoff
-    const size_t len = strlen(shift_name);
-    NOMORE(shift, _MAX(len - MENU_CHAR_LIMIT, 0U));
-
-    // Shorten to the available space
-    const size_t lastchar = _MIN((signed)len, shift + MENU_CHAR_LIMIT);
-
-    const char c = shift_name[lastchar];
-    shift_name[lastchar] = '\0';
-
-    const uint8_t row = select_file.now + MROWS - index_file; // skip "Back" and scroll
-    Erase_Menu_Text(row);
-    Draw_Menu_Line(row, 0, &shift_name[shift]);
-
-    shift_name[lastchar] = c;
-  }
-
+void Draw_SDItem_Shifted(uint8_t &shift)
+{
+  // Limit to the number of chars past the cutoff
+  const size_t len = strlen(shift_name);
+  NOMORE(shift, _MAX(len - MENU_CHAR_LIMIT, 0U));
+  // Shorten to the available space
+  const size_t lastchar = _MIN((signed)len, shift + MENU_CHAR_LIMIT);
+  const char c = shift_name[lastchar];
+  shift_name[lastchar] = '\0';
+  const uint8_t row = select_file.now + MROWS - index_file; // skip "Back" and scroll
+  Erase_Menu_Text(row);
+  Draw_Menu_Line(row, 0, &shift_name[shift]);
+  shift_name[lastchar] = c;
+}
 #endif
-
 // Redraw the first set of SD Files
-void Redraw_SD_List() {
+void Redraw_SD_List()
+{
   select_file.reset();
   index_file = MROWS;
-
   Clear_Menu_Area(); // Leave title bar unchanged
-
   Draw_Back_First();
-
-  if (card.isMounted()) {
+  if (card.isMounted())
+  {
     // As many files as will fit
     LOOP_L_N(i, _MIN(nr_sd_menu_items(), MROWS))
-      Draw_SDItem(i, i + 1);
-
+    Draw_SDItem(i, i + 1);
     TERN_(SCROLL_LONG_FILENAMES, Init_SDItem_Shift());
   }
   // else {
@@ -2245,22 +3593,20 @@ void Redraw_SD_List() {
   //   DWIN_Draw_String(false, false, font16x32, Color_Yellow, Color_Bg_Red, ((DWIN_WIDTH) - 8 * 16) / 2, MBASE(3), F("No Media"));
   // }
 }
-
 bool DWIN_lcd_sd_status = false;
 bool pause_action_flag = false;
-
-void SDCard_Up() {
+void SDCard_Up()
+{
   card.cdup();
   Redraw_SD_List();
   DWIN_lcd_sd_status = false; // On next DWIN_Update
 }
-
-void SDCard_Folder(char * const dirname) {
+void SDCard_Folder(char *const dirname)
+{
   card.cd(dirname);
   Redraw_SD_List();
   DWIN_lcd_sd_status = false; // On next DWIN_Update
 }
-
 //
 // Watch for media mount / unmount
 //
@@ -2269,13 +3615,15 @@ void HMI_SDCardUpdate() {
   if (DWIN_lcd_sd_status != card.isMounted()) {
     DWIN_lcd_sd_status = card.isMounted();
     //SERIAL_ECHOLNPAIR("HMI_SDCardUpdate: ", DWIN_lcd_sd_status);
-    if (DWIN_lcd_sd_status) {
+    if (DWIN_lcd_sd_status)
+    {
       if (checkkey == SelectFile)
         Redraw_SD_List();
     }
-    else {
+    else
+    {
       // clean file icon
-      if (checkkey == SelectFile) 
+      if (checkkey == SelectFile)
       {
         Redraw_SD_List();
       }
@@ -2291,145 +3639,204 @@ void HMI_SDCardUpdate() {
           dwin_abort_flag = true; // Reset feedrate, return to Home
         }
         */
-       
       }
     }
     DWIN_UpdateLCD();
   }
 }
-
 //
 // The status area is always on-screen, except during
 // full-screen modal dialogs. (TODO: Keep alive during dialogs)
 //
-void Draw_Status_Area(const bool with_update) {
-
+void Draw_Status_Area(const bool with_update)
+{
   DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, STATUS_Y, DWIN_WIDTH, DWIN_HEIGHT - 1);
-
-  #if HAS_HOTEND
-    DWIN_ICON_Show(ICON, ICON_HotendTemp, 10, 383);
+#if HAS_HOTEND
+  int hotend_0 = thermalManager.wholeDegHotend(0);
+  DWIN_ICON_Show(ICON, ICON_HotendTemp, 10, 383);
+  // 107011 -20210925 解决 激光切换回FDM后喷头温度显示522的bug
+  //DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 28, 384, thermalManager.wholeDegHotend(0));
+  if (hotend_0 > 0)
     DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 28, 384, thermalManager.wholeDegHotend(0));
-    DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 25 + 3 * STAT_CHR_W + 5, 384, F("/"));
-    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 25 + 4 * STAT_CHR_W + 6, 384, thermalManager.degTargetHotend(0)); 
-
-    DWIN_ICON_Show(ICON, ICON_StepE, 112, 417);
-    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 116 + 2 * STAT_CHR_W, 417, planner.flow_percentage[0]);
-    DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 116 + 5 * STAT_CHR_W + 2, 417, F("%"));
-  #endif
-
-  #if HAS_HEATED_BED
-    DWIN_ICON_Show(ICON, ICON_BedTemp, 10, 416);
-    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 28, 417, thermalManager.wholeDegBed());
-    DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 25 + 3 * STAT_CHR_W + 5, 417, F("/"));
-    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 25 + 4 * STAT_CHR_W + 6, 417, thermalManager.degTargetBed());
-  #endif
-
+  else
+  {
+    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 28, 384, -thermalManager.wholeDegHotend(0));
+    DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, 28, 384, F("-"));
+  } // end 107011 -20210925 解决 激光切换回FDM后喷头温度显示522的bug
+  DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 25 + 3 * STAT_CHR_W + 5, 384, F("/"));
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 25 + 4 * STAT_CHR_W + 6, 384, thermalManager.degTargetHotend(0));
+  DWIN_ICON_Show(ICON, ICON_StepE, 112, 417);
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 116 + 2 * STAT_CHR_W, 417, planner.flow_percentage[0]);
+  DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 116 + 5 * STAT_CHR_W + 2, 417, F("%"));
+#endif
+#if HAS_HEATED_BED
+  DWIN_ICON_Show(ICON, ICON_BedTemp, 10, 416);
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 28, 417, thermalManager.wholeDegBed());
+  DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 25 + 3 * STAT_CHR_W + 5, 417, F("/"));
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 25 + 4 * STAT_CHR_W + 6, 417, thermalManager.degTargetBed());
+#endif
   DWIN_ICON_Show(ICON, ICON_Speed, 113, 383);
   DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 116 + 2 * STAT_CHR_W, 384, feedrate_percentage);
   DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 116 + 5 * STAT_CHR_W + 2, 384, F("%"));
+#if HAS_FAN
+  DWIN_ICON_Show(ICON, ICON_FanSpeed, 187, 383);
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 195 + 2 * STAT_CHR_W, 384, thermalManager.fan_speed[0]);
+#endif
+#if HAS_ZOFFSET_ITEM
+  DWIN_ICON_Show(ICON, ICON_Zoffset, 187, 416);
+#endif
+  if (BABY_Z_VAR < 0)
+  {
 
-  #if HAS_FAN
-    DWIN_ICON_Show(ICON, ICON_FanSpeed, 187, 383);
-    DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 195 + 2 * STAT_CHR_W, 384, thermalManager.fan_speed[0]);
-  #endif
-
-  #if HAS_ZOFFSET_ITEM
-    DWIN_ICON_Show(ICON, ICON_Zoffset, 187, 416);
-  #endif
-
-  if (BABY_Z_VAR < 0) {
     DWIN_Draw_FloatValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 2, 2, 207, 417, -BABY_Z_VAR * 100);
     DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, 205, 419, F("-"));
   }
-  else {
+  else
+  {
     DWIN_Draw_FloatValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 2, 2, 207, 417, BABY_Z_VAR * 100);
     DWIN_Draw_String(false, true, font8x16, Color_White, Color_Bg_Black, 205, 419, F(" "));
   }
-
   DWIN_Draw_Rectangle(1, Line_Color, 0, 449, DWIN_WIDTH, 451);
-
-  DWIN_ICON_Show(ICON, ICON_MaxSpeedX,  10, 456);
-  DWIN_ICON_Show(ICON, ICON_MaxSpeedY,  95, 456);
+  DWIN_ICON_Show(ICON, ICON_MaxSpeedX, 10, 456);
+  DWIN_ICON_Show(ICON, ICON_MaxSpeedY, 95, 456);
   DWIN_ICON_Show(ICON, ICON_MaxSpeedZ, 180, 456);
   _draw_xyz_position(true);
-
-  if (with_update) {
+  if (with_update)
+  {
     DWIN_UpdateLCD();
     delay(5);
   }
 }
-
-void HMI_StartFrame(const bool with_update) {
-  Goto_MainMenu();
-  Draw_Status_Area(with_update);
+//107011 -20210915 激光模式
+void Draw_Laser_Status_Area(const bool with_update)
+{
+  DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, STATUS_Y, DWIN_WIDTH, DWIN_HEIGHT - 1);
+  DWIN_ICON_Show(ICON, ICON_Speed, 10, 416);
+  DWIN_Draw_IntValue(true, true, 0, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 3, 13 + 2 * STAT_CHR_W, 417, feedrate_percentage);
+  DWIN_Draw_String(false, false, DWIN_FONT_STAT, Color_White, Color_Bg_Black, 13 + 5 * STAT_CHR_W + 2, 417, F("%"));
+  DWIN_Draw_Rectangle(1, Line_Color, 0, 449, DWIN_WIDTH, 451);
+  DWIN_ICON_Show(ICON, ICON_MaxSpeedX, 10, 456);
+  DWIN_ICON_Show(ICON, ICON_MaxSpeedY, 95, 456);
+  DWIN_ICON_Show(ICON, ICON_MaxSpeedZ, 180, 456);
+  _draw_xyz_position(true);
+  if (with_update)
+  {
+    DWIN_UpdateLCD();
+    delay(5);
+  }
 }
-
-void Draw_Info_Menu() {
+void HMI_StartFrame(const bool with_update)
+{
+  // //107011 -20210911 加入激光头版本 先跳到选择设备界面
+  // #if HAS_CUTTER
+  //   Popup_Window_FdmOrLaser();
+  //   Draw_Laser_Status_Area(with_update);
+  // #else
+  //  Goto_MainMenu();
+  //  Draw_Status_Area(with_update);
+  // #endif
+  //107011 -20210911 加入激光头版本
+#if HAS_CUTTER
+  if (laser_device.is_unknown_device())
+  {
+    //设备还未选择时, 不显示状态图标和数据
+    Popup_Window_FdmOrLaser();
+  }
+  else if (laser_device.is_laser_device())
+  {
+    //设备为激光
+    //Popup_Window_FdmOrLaser();
+    Goto_MainMenu();
+    Draw_Laser_Status_Area(with_update);
+  }
+  else
+#endif
+  { // 设备为FDM
+    Goto_MainMenu();
+    Draw_Status_Area(with_update);
+  }
+}
+void Draw_Info_Menu()
+{
   Clear_Main_Window();
-
   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, (DWIN_WIDTH - strlen(MACHINE_SIZE) * MENU_CHR_W) / 2, 122, F(MACHINE_SIZE));
   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, (DWIN_WIDTH - strlen(SHORT_BUILD_VERSION) * MENU_CHR_W) / 2, 195, F(SHORT_BUILD_VERSION));
-
-  if (HMI_IsChinese()) {
+  if (HMI_IsChinese())
+  {
     DWIN_Frame_TitleCopy(1, 30, 17, 57, 29); // "Info"
-
     DWIN_Frame_AreaCopy(1, 197, 149, 252, 161, 108, 102);
     DWIN_Frame_AreaCopy(1, 1, 164, 56, 176, 108, 175);
-    DWIN_Frame_AreaCopy(1, 58, 164, 113, 176, 105, 248);  //
+    DWIN_Frame_AreaCopy(1, 58, 164, 113, 176, 105, 248); //
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, (DWIN_WIDTH - strlen(CORP_WEBSITE_C) * MENU_CHR_W) / 2, 268, F(CORP_WEBSITE_C));
-
   }
-
-  else {
-    #ifdef USE_STRING_HEADINGS
-      Draw_Title(GET_TEXT_F(MSG_INFO_SCREEN));
-    #else
-      DWIN_Frame_TitleCopy(1, 190, 16, 215, 26); // "Info"
-    #endif
-
+  else
+  {
+#ifdef USE_STRING_HEADINGS
+    Draw_Title(GET_TEXT_F(MSG_INFO_SCREEN));
+#else
+    DWIN_Frame_TitleCopy(1, 190, 16, 215, 26); // "Info"
+#endif
     DWIN_Frame_AreaCopy(1, 120, 150, 146, 161, 124, 102);
     DWIN_Frame_AreaCopy(1, 146, 151, 254, 161, 82, 175);
     DWIN_Frame_AreaCopy(1, 0, 165, 94, 175, 89, 248);
     DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, (DWIN_WIDTH - strlen(CORP_WEBSITE_E) * MENU_CHR_W) / 2, 268, F(CORP_WEBSITE_E));
-
   }
-  
+
   Draw_Back_First();
-  LOOP_L_N(i, 3) {
+  LOOP_L_N(i, 3)
+  {
     DWIN_ICON_Show(ICON, ICON_PrintSize + i, 26, 99 + i * 73);
     DWIN_Draw_Line(Line_Color, 16, MBASE(2) + i * 73, 256, 156 + i * 73);
   }
 }
-
-void Draw_Print_File_Menu() {
+void Draw_Print_File_Menu()
+{
   Clear_Title_Bar();
-
-  if (HMI_IsChinese()) {
+  if (HMI_IsChinese())
+  {
     DWIN_Frame_TitleCopy(1, 0, 31, 55, 44); // "Print file"
   }
-  else {
-    #ifdef USE_STRING_HEADINGS
-      Draw_Title("Print file"); // TODO: GET_TEXT_F
-    #else
-      DWIN_Frame_TitleCopy(1, 52, 31, 137, 41); // "Print file"
+  else
+  {
+#ifdef USE_STRING_HEADINGS
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device())
+    {
+      Draw_Title("File selection"); // TODO: GET_TEXT_F
+    }else
     #endif
+    {
+      Draw_Title("Print file"); // TODO: GET_TEXT_F
+    }
+#else
+    DWIN_Frame_TitleCopy(1, 52, 31, 137, 41);  // "Print file"
+#endif
   }
-
   Redraw_SD_List();
 }
-
 /* Main Process */
-void HMI_MainMenu() {
+void HMI_MainMenu()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_page.inc(4)) {
       switch (select_page.now) {
         case 0: ICON_Print(); break;
         case 1: ICON_Print(); ICON_Prepare(); break;
         case 2: ICON_Prepare(); ICON_Control(); break;
-        case 3: ICON_Control(); TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); break;
+        case 3: 
+          ICON_Control(); 
+          // 107011 -20210924
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device())
+              ICON_AutoHome();
+            else
+          #endif
+          {
+            TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); 
+          }
+        break;
       }
     }
   }
@@ -2439,173 +3846,272 @@ void HMI_MainMenu() {
       {
         case 0: ICON_Print(); ICON_Prepare(); break;
         case 1: ICON_Prepare(); ICON_Control(); break;
-        case 2: ICON_Control(); TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(0); break;
-        case 3: TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); break;
+        case 2: 
+          ICON_Control(); 
+          // 107011 -20210924
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device())
+              ICON_AutoHome();
+            else
+          #endif
+          {
+            TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(0); 
+          }
+          break;
+        case 3: 
+          // 107011 -20210924
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device())
+              ICON_AutoHome();
+            else
+          #endif
+          {
+            TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); 
+          }
+          break;
       }
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
-    switch (select_page.now) {
-      case 0: // Print File
-        checkkey = SelectFile;
-        Draw_Print_File_Menu();
-        break;
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    switch (select_page.now)
+    {
+    case 0:    // Print File
+#if HAS_CUTTER //107011-20210914
+      if (laser_device.is_laser_device())
+      {
+        laser_device.reset_data();
+        laser_device.set_read_gcode_range_on();
+      }
+#endif
+      checkkey = SelectFile;
+      Draw_Print_File_Menu();
+      break;
+    case 1: // Prepare
 
-      case 1: // Prepare
+      select_prepare.reset();
+      index_prepare = MROWS;
+//107011 -20210910 激光模式
+#if HAS_CUTTER
+      if (laser_device.is_laser_device())
+      {
+        checkkey = Laser_Prepare;
+        Draw_Laser_Prepare_Menu();
+      }
+      else
+#endif //#if HAS_CUTTER
+      {
         checkkey = Prepare;
-        select_prepare.reset();
-        index_prepare = MROWS;
         Draw_Prepare_Menu();
-        break;
-
-      case 2: // Control
+      }
+      break;
+    case 2: // Control
+      select_control.reset();
+      index_control = MROWS;
+// 107011 -20210910 激光模式
+#if HAS_CUTTER
+      if (laser_device.is_laser_device())
+      {
+        checkkey = Laser_Control;
+        Draw_Laser_Control_Menu();
+      }
+      else
+#endif // #if HAS_CUTTER
+      {
         checkkey = Control;
-        select_control.reset();
-        index_control = MROWS;
         Draw_Control_Menu();
-        break;
-
-      case 3: // Leveling or Info
-        #if HAS_ONESTEP_LEVELING
-          checkkey = Leveling;
-          HMI_Leveling();
-        #else
-          checkkey = Info;
-          Draw_Info_Menu();
-        #endif
-        break;
+      }
+      break;
+    case 3: // Leveling or Info
+#if HAS_ONESTEP_LEVELING
+    #if HAS_CUTTER
+      if (laser_device.is_laser_device())
+      { //107011-20210915激光模式下回零
+        checkkey = Back_Main_Homing;
+        index_prepare = MROWS;
+        //107011 -20210907
+        queue.inject_P("G28 X Y");
+        Popup_Window_Home();
+      }
+      else
+    #endif
+      { // FDM模式，调平
+        checkkey = Leveling;
+        HMI_Leveling();
+      }
+#else
+      checkkey = Info;
+      Draw_Info_Menu();
+#endif
+      break;
     }
   }
   DWIN_UpdateLCD();
 }
-
 // Select (and Print) File
-void HMI_SelectFile() {
+void HMI_SelectFile()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
-
   const uint16_t hasUpDir = !card.flag.workDirIsRoot;
-
-  if (encoder_diffState == ENCODER_DIFF_NO) {
-    #if ENABLED(SCROLL_LONG_FILENAMES)
-      if (shift_ms && select_file.now >= 1 + hasUpDir) {
-        // Scroll selected filename every second
-        const millis_t ms = millis();
-        if (ELAPSED(ms, shift_ms)) {
-          const bool was_reset = shift_amt < 0;
-          shift_ms = ms + 375UL + was_reset * 250UL;  // ms per character
-          uint8_t shift_new = shift_amt + 1;           // Try to shift by...
-          Draw_SDItem_Shifted(shift_new);             // Draw the item
-          if (!was_reset && shift_new == 0)           // Was it limited to 0?
-            shift_ms = 0;                             // No scrolling needed
-          else if (shift_new == shift_amt)            // Scroll reached the end
-            shift_new = -1;                           // Reset
-          shift_amt = shift_new;                      // Set new scroll
-        }
+  if (encoder_diffState == ENCODER_DIFF_NO)
+  {
+#if ENABLED(SCROLL_LONG_FILENAMES)
+    if (shift_ms && select_file.now >= 1 + hasUpDir)
+    {
+      // Scroll selected filename every second
+      const millis_t ms = millis();
+      if (ELAPSED(ms, shift_ms))
+      {
+        const bool was_reset = shift_amt < 0;
+        shift_ms = ms + 375UL + was_reset * 250UL; // ms per character
+        uint8_t shift_new = shift_amt + 1;         // Try to shift by...
+        Draw_SDItem_Shifted(shift_new);            // Draw the item
+        if (!was_reset && shift_new == 0)          // Was it limited to 0?
+          shift_ms = 0;                            // No scrolling needed
+        else if (shift_new == shift_amt)           // Scroll reached the end
+          shift_new = -1;                          // Reset
+        shift_amt = shift_new;                     // Set new scroll
       }
-    #endif
+    }
+#endif
     return;
   }
-
   // First pause is long. Easy.
   // On reset, long pause must be after 0.
-
   const uint16_t fullCnt = nr_sd_menu_items();
-
-  if (encoder_diffState == ENCODER_DIFF_CW && fullCnt) {
-    if (select_file.inc(1 + fullCnt)) {
-      const uint8_t itemnum = select_file.now - 1;              // -1 for "Back"
-      if (TERN0(SCROLL_LONG_FILENAMES, shift_ms)) {             // If line was shifted
-        Erase_Menu_Text(itemnum + MROWS - index_file);          // Erase and
-        Draw_SDItem(itemnum - 1);                               // redraw
+  if (encoder_diffState == ENCODER_DIFF_CW && fullCnt)
+  {
+    if (select_file.inc(1 + fullCnt))
+    {
+      const uint8_t itemnum = select_file.now - 1; // -1 for "Back"
+      if (TERN0(SCROLL_LONG_FILENAMES, shift_ms))
+      {                                                // If line was shifted
+        Erase_Menu_Text(itemnum + MROWS - index_file); // Erase and
+        Draw_SDItem(itemnum - 1);                      // redraw
       }
-      if (select_file.now > MROWS && select_file.now > index_file) { // Cursor past the bottom
-        index_file = select_file.now;                           // New bottom line
+      if (select_file.now > MROWS && select_file.now > index_file)
+      {                               // Cursor past the bottom
+        index_file = select_file.now; // New bottom line
         Scroll_Menu(DWIN_SCROLL_UP);
-        Draw_SDItem(itemnum, MROWS);                            // Draw and init the shift name
+        Draw_SDItem(itemnum, MROWS); // Draw and init the shift name
       }
-      else {
+      else
+      {
         Move_Highlight(1, select_file.now + MROWS - index_file); // Just move highlight
         TERN_(SCROLL_LONG_FILENAMES, Init_Shift_Name());         // ...and init the shift name
       }
       TERN_(SCROLL_LONG_FILENAMES, Init_SDItem_Shift());
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_CCW && fullCnt) {
-    if (select_file.dec()) {
-      const uint8_t itemnum = select_file.now - 1;              // -1 for "Back"
-      if (TERN0(SCROLL_LONG_FILENAMES, shift_ms)) {             // If line was shifted
+  else if (encoder_diffState == ENCODER_DIFF_CCW && fullCnt)
+  {
+    if (select_file.dec())
+    {
+      const uint8_t itemnum = select_file.now - 1; // -1 for "Back"
+      if (TERN0(SCROLL_LONG_FILENAMES, shift_ms))
+      {                                                            // If line was shifted
         Erase_Menu_Text(select_file.now + 1 + MROWS - index_file); // Erase and
-        Draw_SDItem(itemnum + 1);                               // redraw
+        Draw_SDItem(itemnum + 1);                                  // redraw
       }
-      if (select_file.now < index_file - MROWS) {               // Cursor past the top
-        index_file--;                                           // New bottom line
+      if (select_file.now < index_file - MROWS)
+      {               // Cursor past the top
+        index_file--; // New bottom line
         Scroll_Menu(DWIN_SCROLL_DOWN);
-        if (index_file == MROWS) {
+        if (index_file == MROWS)
+        {
           Draw_Back_First();
           TERN_(SCROLL_LONG_FILENAMES, shift_ms = 0);
         }
-        else {
-          Draw_SDItem(itemnum, 0);                              // Draw the item (and init shift name)
+        else
+        {
+          Draw_SDItem(itemnum, 0); // Draw the item (and init shift name)
         }
       }
-      else {
+      else
+      {
         Move_Highlight(-1, select_file.now + MROWS - index_file); // Just move highlight
-        TERN_(SCROLL_LONG_FILENAMES, Init_Shift_Name());        // ...and init the shift name
+        TERN_(SCROLL_LONG_FILENAMES, Init_Shift_Name());          // ...and init the shift name
       }
-      TERN_(SCROLL_LONG_FILENAMES, Init_SDItem_Shift());        // Reset left. Init timer.
+      TERN_(SCROLL_LONG_FILENAMES, Init_SDItem_Shift()); // Reset left. Init timer.
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
-    if (select_file.now == 0) { // Back
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    if (select_file.now == 0)
+    { // Back
       select_page.set(0);
       Goto_MainMenu();
     }
-    else if (hasUpDir && select_file.now == 1) { // CD-Up
+    else if (hasUpDir && select_file.now == 1)
+    { // CD-Up
       SDCard_Up();
       goto HMI_SelectFileExit;
     }
-    else {
+    else
+    {
       const uint16_t filenum = select_file.now - 1 - hasUpDir;
       card.getfilename_sorted(SD_ORDER(filenum, card.get_num_Files()));
-
       // Enter that folder!
-      if (card.flag.filenameIsDir) {
+      if (card.flag.filenameIsDir)
+      {
         SDCard_Folder(card.filename);
         goto HMI_SelectFileExit;
       }
-
       // Reset highlight for next entry
       select_print.reset();
       select_file.reset();
-
       // Start choice and print SD file
       HMI_flag.heat_flag = true;
       HMI_flag.print_finish = false;
       HMI_ValueStruct.show_mode = 0;
       recovery.info.sd_printing_flag=true; //rock_20210819
-      //SERIAL_ECHOLNPAIR("\r\n sd_printing_flag: ", recovery.info.sd_printing_flag);//rock 20210730
-      card.openAndPrintFile(card.filename);
+      //SERIAL_ECHOLNPAIR("\r\n wifi_printing_flag: ", recovery.info.wifi_printing_flag);//rock 20210730
+      #if HAS_CUTTER
+      if (laser_device.is_laser_device())
+      {
+        laser_device.is_run_range = false;
+        // 107011 -20210910 激光模式下 选中文件后先暂停打印
+        card.openAndPausePrintFile(card.filename);
+        print_job_timer.reset();  //107011 -20211009 清除前一次的打印时间
+        
+        _remain_time = 0;//解决再次打印剩余时间不清零的bug  107011 -20211011 
+        laser_device.already_show_warning = false; //  雕刻警告界面 107011 -20211029
+        laser_device.remove_card_before_is_printing = false; //20211020
+        HMI_flag.select_flag = 1;
+        laser_device.laser_printing = false;
+        laser_device.remain_time = 0;
+        select_page.set(1); //选中直接打印
+        checkkey = Laser_Print_Warning;
+        Clear_Status_Area();
+        Draw_print_Warning(); 
+
+        laser_device.reset_data();// 清除跑边框数据
+        laser_device.set_read_gcode_range_on(); //读取Gcode中的范围
+      }else
+      #endif
+      {
+        card.openAndPrintFile(card.filename);
+        Goto_PrintProcess(); // 107011 -20211122
+      }
 
       #if HAS_FAN
-        // All fans on for Ender 3 v2 ?
-        // The slicer should manage this for us.
-        //for (uint8_t i = 0; i < FAN_COUNT; i++)
-        //  thermalManager.fan_speed[i] = 255;
+      // All fans on for Ender 3 v2 ?
+      // The slicer should manage this for us.
+      //for (uint8_t i = 0; i < FAN_COUNT; i++)
+      //  thermalManager.fan_speed[i] = 255;
       #endif
       //print_job_timer.reset();  //rock_20210726 打印时间清
-      Goto_PrintProcess();
+      //Goto_PrintProcess();
     }
   }
 HMI_SelectFileExit:
   DWIN_UpdateLCD();
 }
-
 /* Printing */
-void HMI_Printing() 
+void HMI_Printing()
 {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   if (HMI_flag.done_confirm_flag) 
   {
     if (encoder_diffState == ENCODER_DIFF_ENTER) {
@@ -2614,9 +4120,8 @@ void HMI_Printing()
     }
     return;
   }
-
   // Avoid flicker by updating only the previous menu
-  if (encoder_diffState == ENCODER_DIFF_CW) 
+  if (encoder_diffState == ENCODER_DIFF_CW)
   {
     if (select_print.inc(3)) {
       switch (select_print.now) 
@@ -2633,9 +4138,18 @@ void HMI_Printing()
       }
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_CCW) 
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
   {
     if (select_print.dec()) {
+      //激光模式 && 打印中 && 选中设置 则更改选中按钮为暂停
+      #if HAS_CUTTER
+      //if(laser_device.is_laser_device() &&!HMI_flag.select_flag && !select_print.now) 
+      if(laser_device.is_laser_device() &&laser_device.laser_printing && !select_print.now) 
+      { 
+        //SERIAL_ECHO_MSG("\nlaser_device.laser_printing =",laser_device.laser_printing);
+        select_print.set(1);
+      }
+	  #endif
       switch (select_print.now) {
         case 0:
           ICON_Tune();
@@ -2649,93 +4163,160 @@ void HMI_Printing()
       }
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
-    switch (select_print.now) 
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    switch (select_print.now)
     {
-      case 0: // Tune
+    case 0: // Tune
+
+      HMI_ValueStruct.show_mode = 0;
+      select_tune.reset();
+      index_tune = MROWS;
+      //107011 -20210910 激光模式下打印中的设置界面
+      #if HAS_CUTTER
+        if (laser_device.is_laser_device())
+        {
+          checkkey = Laser_Tune;
+
+          Draw_Tune_Laser_Menu();
+        }
+        else
+      #endif //#if HAS_CUTTER
+      {
         checkkey = Tune;
-        HMI_ValueStruct.show_mode = 0;
-        select_tune.reset();
-        index_tune = MROWS;
         Draw_Tune_Menu();
-        break;
-      case 1: // Pause
-        if (HMI_flag.pause_flag) 
-        { //确定 
+      }
+      break;
+    case 1: // Pause
+      if (HMI_flag.pause_flag)
+      { //继续
+        select_page.reset();
+        #if HAS_CUTTER
+        if (laser_device.is_laser_device()&&!laser_device.already_show_warning)  //  雕刻警告界面 107011 -20211029
+        { 
+          checkkey = Laser_Print_Warning;
+          select_page.set(1);
+          Clear_Status_Area();
+          Draw_print_Warning(); 
+        }
+        else
+        #endif
+        {
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device()){
+              Clear_Title_Bar();
+              Draw_Printing_Title(); // 107011 -20210926 打印中
+              laser_device.laser_printing = true; // 雕刻中 107011 -20211029
+              ICON_Tune();
+            }
+          #endif
+
           ICON_Pause();
           char cmd[40];
           cmd[0] = '\0';
           #if BOTH(HAS_HEATED_BED, PAUSE_HEAT)
-            //if (resume_bed_temp) sprintf_P(cmd, PSTR("M190 S%i\n"), resume_bed_temp); //rock_20210901 
+                    //if (resume_bed_temp) sprintf_P(cmd, PSTR("M190 S%i\n"), resume_bed_temp); //rock_20210901
           #endif
           #if BOTH(HAS_HOTEND, PAUSE_HEAT)
-            //if (resume_hotend_temp) sprintf_P(&cmd[strlen(cmd)], PSTR("M109 S%i\n"), resume_hotend_temp);
+                    //if (resume_hotend_temp) sprintf_P(&cmd[strlen(cmd)], PSTR("M109 S%i\n"), resume_hotend_temp);
           #endif
           if(HMI_flag.cloud_printing_flag && !HMI_flag.filement_resume_flag)
           {
             SERIAL_ECHOLN("M79 S3");
           }
-          pause_resume_feedstock(FEEDING_DEF_DISTANCE,FEEDING_DEF_SPEED);
-          strcat_P(cmd, M24_STR);
-          queue.inject(cmd);          
-          Goto_PrintProcess();
-        }
-        else {  //取消
-          HMI_flag.select_flag = true;
-          checkkey = Print_window;
-          Popup_window_PauseOrStop();
-        }
-        break;
 
-      case 2: // Stop
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device())
+            {
+              laser_device.laser_printing = true; // 雕刻中 107011 -20211029
+              strcat_P(cmd, M24_STR);
+              queue.inject(cmd);   
+            }else
+          #endif
+          {
+            pause_resume_feedstock(FEEDING_DEF_DISTANCE,FEEDING_DEF_SPEED);
+            strcat_P(cmd, M24_STR);
+            queue.inject(cmd);   
+            Goto_PrintProcess();
+          }
+       
+          //Goto_PrintProcess();
+        }
+        //Goto_PrintProcess();
+      }
+      else
+      { //暂停
         HMI_flag.select_flag = true;
         checkkey = Print_window;
-        Popup_window_PauseOrStop();       
-        
-        break;
-      default: break;
+        Popup_window_PauseOrStop();
+      }
+      break;
+    case 2: // Stop
+      HMI_flag.select_flag = true;
+      checkkey = Print_window;
+      Popup_window_PauseOrStop();
+      break;
+    default:
+      break;
     }
   }
   DWIN_UpdateLCD();
 }
-
 /* Pause and Stop window */
-void HMI_PauseOrStop() {
+void HMI_PauseOrStop()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
-  if (encoder_diffState == ENCODER_DIFF_NO) return;
-
+  if (encoder_diffState == ENCODER_DIFF_NO)
+    return;
   if (encoder_diffState == ENCODER_DIFF_CW)
     Draw_Select_Highlight(false);
   else if (encoder_diffState == ENCODER_DIFF_CCW)
     Draw_Select_Highlight(true);
-  else if (encoder_diffState == ENCODER_DIFF_ENTER) 
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
   {
-    if (select_print.now == 1) 
+    if (select_print.now == 1)
     { // pause window
-      if (HMI_flag.select_flag) 
+      if (HMI_flag.select_flag)
       {
         HMI_flag.pause_action = true;
         ICON_Continue();
         if(HMI_flag.cloud_printing_flag&&!HMI_flag.filement_resume_flag)
         {
-           //SERIAL_ECHOLN("M79 S2");   // 3:cloud print pause
-           SERIAL_ECHOLN("paused for user");
+          SERIAL_ECHOLN("M79 S2");   // 3:cloud print pause
         }
         queue.inject_P(PSTR("M25"));
+        // 记录激光打印状态
+        #if HAS_CUTTER
+          if(laser_device.is_laser_device()) 
+          {
+            laser_device.laser_printing = false;  // 107011 -20211029
+            laser_device.remove_card_before_is_printing = false; // 107011 -20211029
+          }
+        #endif
       }
-      else  //点击过不再提示 
+      else //点击过不再提示
       {
-         
-      }     
+      }
       Goto_PrintProcess();
     }
-    else if (select_print.now == 2) { // stop window
-      if (HMI_flag.select_flag) 
+    else if (select_print.now == 2)
+    { // stop window
+      if (HMI_flag.select_flag)
       {
+        //checkkey = Back_Main; // 往后移 107011 -20211020
+        #if HAS_CUTTER
+          if(laser_device.is_laser_device()) {
+            laser_device.quick_stop(); //107011 -20210927
+            laser_device.remove_card_before_is_printing = false;
+          }
+        #endif
         if (HMI_flag.home_flag) planner.synchronize(); // Wait for planner moves to finish!
-        wait_for_heatup = wait_for_user = false;       // Stop waiting for heating/user        
+        wait_for_heatup = wait_for_user = false;       // Stop waiting for heating/user
+        //card.abortFilePrintSoon(); //往后移 107011 -20211020                    // Let the main loop handle SD abort 
+
         HMI_flag.disallow_recovery_flag=true;  //不允许恢复数据
-        //rock_20211227
+
+        //rock_20211017
         // queue.clear();
         // quickstop_stepper();
         print_job_timer.stop();
@@ -2751,12 +4332,15 @@ void HMI_PauseOrStop() {
         #ifdef ACTION_ON_CANCEL
           host_action_cancel();  //
         #endif
-        // BL24CXX::EEPROM_Reset(PLR_ADDR, (uint8_t*)&recovery.info, sizeof(recovery.info));//rock_20210812  清空 EEPROM
+        // 停止后快速拔卡界面卡住的bug 107011 -20211020
+        delay(30);
+        card.abortFilePrintSoon(); 
+        checkkey = Back_Main;
+
         //checkkey = Popup_Window;
         Popup_Window_Home(true);
-        
-        card.abortFilePrintSoon();                     // Let the main loop handle SD abort  //rock_20211020
-        checkkey = Back_Main;
+        //BL24CXX::EEPROM_Reset(PLR_ADDR, (uint8_t *)&recovery.info, sizeof(recovery.info)); //rock_20210812  清空 EEPROM
+
         if(HMI_flag.cloud_printing_flag)
         {
           HMI_flag.cloud_printing_flag=false;
@@ -2770,9 +4354,42 @@ void HMI_PauseOrStop() {
   }
   DWIN_UpdateLCD();
 }
+#if HAS_CUTTER
+//107011 -20210911 选择激光/FDM模式
+void HMI_LaserOrFDM()
+{
+  ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  if (encoder_diffState == ENCODER_DIFF_CW)
+    Draw_Main_Sw_Fdm_Laser_Highlight(false);
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+    Draw_Main_Sw_Fdm_Laser_Highlight(true);
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    if (HMI_flag.select_flag)
+    { // 选择 FDM
+      laser_device.set_current_device(DEVICE_FDM);
+      //checkkey = Back_Main;
+      HMI_StartFrame(false);
+      //Goto_MainMenu();
+    }
+    else
+    {   // 选择 激光
+      laser_device.set_read_gcode_range_on(); //读取Gcode中的范围
+      laser_device.reset_data();
+      laser_device.set_current_device(DEVICE_LASER);
+      checkkey = Laser_Focus;
+      Draw_Laser_Status_Area(false);
+      Draw_Laser_Focus();
+    }
+
+  }
+  DWIN_UpdateLCD();
+}
+#endif
 #if ENABLED(HAS_CHECKFILAMENT)
-	/* Check filament */
-void HMI_Filament() 
+/* Check filament */
+void HMI_Filament()
 {
   ENCODER_DiffState encoder_diffState;
   if(READ(CHECKFILAMENT_PIN)&&HMI_flag.cloud_printing_flag)
@@ -2804,7 +4421,6 @@ void HMI_Filament()
 	  }
 	  else if (encoder_diffState == ENCODER_DIFF_ENTER)
 	  {
-      // SERIAL_ECHOLNPAIR("HMI_flag.select_flag=: ", HMI_flag.select_flag);
       if(HMI_flag.select_flag) 
       {
         if(READ(CHECKFILAMENT_PIN) == 0)//原为if(READ(CHECKFILAMENT_PIN))------zy
@@ -2817,9 +4433,10 @@ void HMI_Filament()
               if(HMI_flag.cloud_printing_flag)
               {
                 HMI_flag.filement_resume_flag=false; //解除断料状态，可以响应云指令
-                // SERIAL_ECHOLN("M79 S3");
-                print_job_timer.start();
-                gcode.process_subcommands_now_P(PSTR("M24"));
+                HMI_flag.disable_queued_cmd=false;//可以接收GCOD指令
+                SERIAL_ECHOLN("M79 S3");
+                 print_job_timer.start();
+                 gcode.process_subcommands_now_P(PSTR("M24"));
                 Goto_PrintProcess();       
                 ICON_Pause();  //暂停界面      
               }
@@ -2828,11 +4445,11 @@ void HMI_Filament()
                 if((!HMI_flag.remove_card_flag)&& (!temp_remove_card_flag)) 
                 {
                   pause_resume_feedstock(FEEDING_DEF_DISTANCE,FEEDING_DEF_SPEED);
+
                   gcode.process_subcommands_now_P(PSTR("M24"));
                   Goto_PrintProcess(); 
                 }
-              }
-              HMI_flag.disable_queued_cmd=false;   //可以接收GCOD指令                         
+              }                         
             }
         }    
       }
@@ -2871,49 +4488,57 @@ void HMI_Filament()
 	  }
 	  DWIN_UpdateLCD();
 }
-
-	/* Remove_card_window */
-void HMI_Remove_card() 
+/* Remove_card_window */
+void HMI_Remove_card()
 {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   //ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
  
     if (encoder_diffState == ENCODER_DIFF_ENTER)
-	  {      
-        if(IS_SD_INSERTED()) //有卡
+	  {
+      if(IS_SD_INSERTED()) //有卡
+      {
+        HMI_flag.remove_card_flag=false;
+        temp_remove_card_flag=false;          
+        // #if ENABLED(PAUSE_HEAT)
+        //   char cmd[20];
+        // #endif
+        #if HAS_CUTTER
+           if(laser_device.is_laser_device() && !laser_device.remove_card_before_is_printing){ 
+             //107011 -20211021
+             Draw_Laser_Status_Area(true); // 修复bug 激光在未打印时，点击开始打印->弹出打印警告界面-> 拔卡->弹出卡移除警告->插入SD卡->点击确定 “跑边框”和“返回”的按钮框没有消失
+           }else
+        #endif
         {
-          HMI_flag.remove_card_flag=false;
-          temp_remove_card_flag=false;          
-          #if ENABLED(PAUSE_HEAT)
-            char cmd[20];
-          #endif
           pause_resume_feedstock(FEEDING_DEF_DISTANCE,FEEDING_DEF_SPEED);
           gcode.process_subcommands_now_P(PSTR("M24"));
-          Goto_PrintProcess();//
-          // recovery.info.sd_printing_flag=remove_card_flag;
         }
-      // }
+        Goto_PrintProcess();//
+        // recovery.info.wifi_printing_flag=remove_card_flag;
+      }
       else 
       {
         //Remove_card_window_check();
       }
+        
 	  }
 	  DWIN_UpdateLCD();
 }
 
 #endif
-void Draw_Move_Menu() 
+void Draw_Move_Menu()
 {
   Clear_Main_Window();
-  if (HMI_IsChinese()) {
+  if (HMI_IsChinese())
+  {
     DWIN_Frame_TitleCopy(1, 192, 1, 233, 14); // "Move"
     DWIN_Frame_AreaCopy(1, 58, 118, 106, 132, LBLX, MBASE(1));
     DWIN_Frame_AreaCopy(1, 109, 118, 157, 132, LBLX, MBASE(2));
     DWIN_Frame_AreaCopy(1, 160, 118, 209, 132, LBLX, MBASE(3));
-    #if HAS_HOTEND
-      DWIN_Frame_AreaCopy(1, 212, 118, 253, 131, LBLX, MBASE(4));
-    #endif
+#if HAS_HOTEND
+    DWIN_Frame_AreaCopy(1, 212, 118, 253, 131, LBLX, MBASE(4));
+#endif
   }
   else {
     #ifdef USE_STRING_HEADINGS
@@ -2928,28 +4553,50 @@ void Draw_Move_Menu()
       DWIN_Frame_AreaCopy(1, 123, 192, 176, 202, LBLX, MBASE(4));   // "Extruder"
     #endif
   }
-
   Draw_Back_First(select_axis.now == 0);
   if (select_axis.now) Draw_Menu_Cursor(select_axis.now);
-
   // Draw separators and icons
   LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MoveX + i);
 }
-
-void Draw_AdvSet_Menu() {
+#if HAS_CUTTER
+//107011-20210915 轴移动
+void Draw_Laser_Move_Menu()
+{
   Clear_Main_Window();
-
-  #if ADVSET_CASE_TOTAL >= 6
-    const int16_t scroll = MROWS - index_advset; // Scrolled-up lines
-    #define ASCROL(L) (scroll + (L))
-  #else
-    #define ASCROL(L) (L)
-  #endif
-
-#define AVISI(L)  WITHIN(ASCROL(L), 0, MROWS)
-
+  if (HMI_IsChinese())
+  {
+    DWIN_Frame_TitleCopy(1, 192, 1, 233, 14); // "Move"
+    DWIN_Frame_AreaCopy(1, 58, 118, 106, 132, LBLX, MBASE(1));
+    DWIN_Frame_AreaCopy(1, 109, 118, 157, 132, LBLX, MBASE(2));
+    DWIN_Frame_AreaCopy(1, 160, 118, 209, 132, LBLX, MBASE(3));
+  }
+  else {
+    #ifdef USE_STRING_HEADINGS
+      Draw_Title(GET_TEXT_F(MSG_MOVE_AXIS));
+    #else
+      DWIN_Frame_TitleCopy(1, 231, 2, 265, 12);                     // "Move"
+    #endif
+    draw_move_en(MBASE(1)); say_x(36, MBASE(1));                    // "Move X"
+    draw_move_en(MBASE(2)); say_y(36, MBASE(2));                    // "Move Y"
+    draw_move_en(MBASE(3)); say_z(36, MBASE(3));                    // "Move Z"
+  }
+  Draw_Back_First(select_axis.now == 0);
+  if (select_axis.now) Draw_Menu_Cursor(select_axis.now);
+  // Draw separators and icons
+  LOOP_L_N(i, 3) Draw_Menu_Line(i + 1, ICON_MoveX + i);
+}
+#endif
+void Draw_AdvSet_Menu()
+{
+  Clear_Main_Window();
+#if ADVSET_CASE_TOTAL >= 6
+  const int16_t scroll = MROWS - index_advset; // Scrolled-up lines
+#define ASCROL(L) (scroll + (L))
+#else
+#define ASCROL(L) (L)
+#endif
+#define AVISI(L) WITHIN(ASCROL(L), 0, MROWS)
   Draw_Title(GET_TEXT_F(MSG_ADVANCED_SETTINGS));
-
   if (AVISI(0)) Draw_Back_First(select_advset.now == 0);
   if (AVISI(ADVSET_CASE_HOMEOFF)) Draw_Menu_Line(ASCROL(ADVSET_CASE_HOMEOFF), ICON_HomeOff, GET_TEXT(MSG_SET_HOME_OFFSETS),true);  // Home Offset >
   #if HAS_ONESTEP_LEVELING
@@ -2965,20 +4612,19 @@ void Draw_AdvSet_Menu() {
   #endif
   if (select_advset.now) Draw_Menu_Cursor(ASCROL(select_advset.now));
 }
-
-void Draw_HomeOff_Menu() {
+void Draw_HomeOff_Menu()
+{
   Clear_Main_Window();
-  Draw_Title(GET_TEXT_F(MSG_SET_HOME_OFFSETS));                 // Home Offsets
+  Draw_Title(GET_TEXT_F(MSG_SET_HOME_OFFSETS)); // Home Offsets
   Draw_Back_First(select_item.now == 0);
-  Draw_Menu_Line(1, ICON_HomeOffX, GET_TEXT(MSG_HOME_OFFSET_X));  // Home X Offset
+  Draw_Menu_Line(1, ICON_HomeOffX, GET_TEXT(MSG_HOME_OFFSET_X)); // Home X Offset
   DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, 216, MBASE(1), HMI_ValueStruct.Home_OffX_scaled);
-  Draw_Menu_Line(2, ICON_HomeOffY, GET_TEXT(MSG_HOME_OFFSET_Y));  // Home Y Offset
+  Draw_Menu_Line(2, ICON_HomeOffY, GET_TEXT(MSG_HOME_OFFSET_Y)); // Home Y Offset
   DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, 216, MBASE(2), HMI_ValueStruct.Home_OffY_scaled);
-  Draw_Menu_Line(3, ICON_HomeOffZ, GET_TEXT(MSG_HOME_OFFSET_Z));  // Home Y Offset
+  Draw_Menu_Line(3, ICON_HomeOffZ, GET_TEXT(MSG_HOME_OFFSET_Z)); // Home Y Offset
   DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, 216, MBASE(3), HMI_ValueStruct.Home_OffZ_scaled);
   if (select_item.now) Draw_Menu_Cursor(select_item.now);
 }
-
 #if HAS_ONESTEP_LEVELING
   void Draw_ProbeOff_Menu() {
     Clear_Main_Window();
@@ -2991,11 +4637,11 @@ void Draw_HomeOff_Menu() {
     if (select_item.now) Draw_Menu_Cursor(select_item.now);
   }
 #endif
-
 #include "../../../libs/buzzer.h"
-
-void HMI_AudioFeedback(const bool success=true) {
-  if (success) {
+void HMI_AudioFeedback(const bool success = true)
+{
+  if (success)
+  {
     buzzer.tone(100, 659);
     buzzer.tone(10, 0);
     buzzer.tone(100, 698);
@@ -3003,25 +4649,24 @@ void HMI_AudioFeedback(const bool success=true) {
   else
     buzzer.tone(40, 440);
 }
-
 /* Prepare */
-void HMI_Prepare() {
+void HMI_Prepare()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
-  if (encoder_diffState == ENCODER_DIFF_CW) {
-    if (select_prepare.inc(1 + PREPARE_CASE_TOTAL)) {
-      if (select_prepare.now > MROWS && select_prepare.now > index_prepare) {
+  if (encoder_diffState == ENCODER_DIFF_CW)
+  {
+    if (select_prepare.inc(1 + PREPARE_CASE_TOTAL))
+    {
+      if (select_prepare.now > MROWS && select_prepare.now > index_prepare)
+      {
         index_prepare = select_prepare.now;
-
         // Scroll up and draw a blank bottom line
         Scroll_Menu(DWIN_SCROLL_UP);
         Draw_Menu_Icon(MROWS, ICON_Axis + select_prepare.now - 1);
-
         // Draw "More" icon for sub-menus
         if (index_prepare < 7) Draw_More_Icon(MROWS - index_prepare + 1);
-
         #if HAS_HOTEND
           if (index_prepare == PREPARE_CASE_ABS) Item_Prepare_ABS(MROWS);
         #endif
@@ -3030,7 +4675,8 @@ void HMI_Prepare() {
         #endif
         if (index_prepare == PREPARE_CASE_LANG) Item_Prepare_Lang(MROWS);
       }
-      else {
+      else
+      {
         Move_Highlight(1, select_prepare.now + MROWS - index_prepare);
       }
     }
@@ -3040,19 +4686,17 @@ void HMI_Prepare() {
       if (select_prepare.now < index_prepare - MROWS) {
         index_prepare--;
         Scroll_Menu(DWIN_SCROLL_DOWN);
-
         if (index_prepare == MROWS)
           Draw_Back_First();
         else
           Draw_Menu_Line(0, ICON_Axis + select_prepare.now - 1);
-
         if (index_prepare < 7) Draw_More_Icon(MROWS - index_prepare + 1);
-
              if (index_prepare == 6) Item_Prepare_Move(0);
         else if (index_prepare == 7) Item_Prepare_Disable(0);
         else if (index_prepare == 8) Item_Prepare_Home(0);
       }
-      else {
+      else
+      {
         Move_Highlight(-1, select_prepare.now + MROWS - index_prepare);
       }
     }
@@ -3070,7 +4714,7 @@ void HMI_Prepare() {
         checkkey = AxisMove;
         select_axis.reset();
         Draw_Move_Menu();
-        gcode.process_subcommands_now("G92 E0"); //rock_20210927 liuxu  Reset Extruder
+        gcode.process_subcommands_now((char*)"G92 E0"); //rock_20210927 liuxu  Reset Extruder
         // current_position.e=0;  //rock_20210901 liuxu
         // DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * MINUNITMULT);
         DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * MINUNITMULT);
@@ -3089,13 +4733,13 @@ void HMI_Prepare() {
             checkkey = Last_Prepare;
             index_prepare = MROWS;
             queue.inject_P(G28_STR); // G28 will set home_flag
-             Popup_Window_Home();   //rock_20211025
+            Popup_Window_Home();   //rock_20211025
             //Electricity_back_to_zero(0);
           }
         break;
       case PREPARE_CASE_DISA: // Disable steppers
         queue.inject_P(PSTR("M84"));
-        gcode.process_subcommands_now("G92.9Z0"); //rock_20211224 解决人为下降Z轴，导致撞平台的问题。
+        gcode.process_subcommands_now((char*)"G92.9 Z0"); //rock_20211224 解决人为下降Z轴，导致撞平台的问题。
         break;
       case PREPARE_CASE_HOME: // Homing
         HMI_flag.power_back_to_zero_flag=true; //rock_21211025
@@ -3146,108 +4790,182 @@ void HMI_Prepare() {
   }
   DWIN_UpdateLCD();
 }
-
-void Draw_Temperature_Menu() {
+#if HAS_CUTTER
+// 107011 -20210910 激光模式
+/* Prepare */
+void HMI_Laser_Prepare() {
+	ENCODER_DiffState encoder_diffState = get_encoder_state();
+	if (encoder_diffState == ENCODER_DIFF_NO) return;
+	
+	// Avoid flicker by updating only the previous menu
+	if (encoder_diffState == ENCODER_DIFF_CW) {
+	  if (select_prepare.inc(1 + PREPARE_LASER_CASE_TOTAL)) {
+		if (select_prepare.now > MROWS && select_prepare.now > index_prepare) {
+		  index_prepare = select_prepare.now;
+	
+		  // Scroll up and draw a blank bottom line
+		  Scroll_Menu(DWIN_SCROLL_UP);
+		  Draw_Menu_Icon(MROWS, ICON_Axis + select_prepare.now - 1);
+	
+		  // Draw "More" icon for sub-menus
+		  if (index_prepare < 7) Draw_More_Icon(MROWS - index_prepare + 1);
+	
+		}
+		else {
+		  Move_Highlight(1, select_prepare.now + MROWS - index_prepare);
+		}
+	  }
+	}  else if (encoder_diffState == ENCODER_DIFF_CCW) {
+    if (select_prepare.dec()) {
+      if (select_prepare.now < index_prepare - MROWS) {
+        index_prepare--;
+        Scroll_Menu(DWIN_SCROLL_DOWN);
+        if (index_prepare == MROWS)
+          Draw_Back_First();
+        else
+          Draw_Menu_Line(0, ICON_Axis + select_prepare.now - 1);
+        if (index_prepare < 7) Draw_More_Icon(MROWS - index_prepare + 1);
+      }
+      else {
+        Move_Highlight(-1, select_prepare.now + MROWS - index_prepare);
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+    switch (select_prepare.now) {
+      case 0: // Back
+        select_page.set(1);
+        Goto_MainMenu();
+        break;
+      case PREPARE_LASER_CASE_MOVE: // Axis move
+        checkkey = LaserAxisMove;
+        select_axis.reset();
+        Draw_Laser_Move_Menu();
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), current_position.x * MINUNITMULT);
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), current_position.y * MINUNITMULT);
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(3), current_position.z * MINUNITMULT);
+        break;
+      case PREPARE_LASER_CASE_DISA: // Disable steppers
+        queue.inject_P(PSTR("M84"));
+        break;
+      case PREPARE_LASER_CASE_HOME: // Homing
+        checkkey = Last_Prepare;
+        index_prepare = MROWS;
+        //107011 -20210907
+        queue.inject_P("G28 X Y");
+        Popup_Window_Home();
+        break;
+      case PREPARE_LASER_CASE_LANG: // Toggle Language
+        HMI_ToggleLanguage();
+		    Draw_Laser_Prepare_Menu();
+        break;
+      // case PREPARE_LASER_CASE_ORIGIN: //107011 -20210923
+      //   queue.inject_P("G92 X0 Y0 Z0");
+      //   break;
+      default: break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+#endif //#if HAS_CUTTER
+void Draw_Temperature_Menu()
+{
   Clear_Main_Window();
-
-  if (HMI_IsChinese()) {
+  if (HMI_IsChinese())
+  {
     DWIN_Frame_TitleCopy(1, 236, 2, 263, 13); // "Temperature"
-    #if HAS_HOTEND
-      DWIN_Frame_AreaCopy(1, 1, 134, 56, 146, LBLX, MBASE(TEMP_CASE_TEMP));
-    #endif
-    #if HAS_HEATED_BED
-      DWIN_Frame_AreaCopy(1, 58, 134, 113, 146, LBLX, MBASE(TEMP_CASE_BED));
-    #endif
-    #if HAS_FAN
-      DWIN_Frame_AreaCopy(1, 115, 134, 172, 146, LBLX, MBASE(TEMP_CASE_FAN));
-    #endif
-    #if HAS_HOTEND
-      DWIN_Frame_AreaCopy(1, 100, 87, 178, 101, LBLX, MBASE(TEMP_CASE_PLA));  //rock_20210727
-      DWIN_Frame_AreaCopy(1, 180, 87, 260, 100, LBLX, MBASE(TEMP_CASE_ABS));
-    #endif
+#if HAS_HOTEND
+    DWIN_Frame_AreaCopy(1, 1, 134, 56, 146, LBLX, MBASE(TEMP_CASE_TEMP));
+#endif
+#if HAS_HEATED_BED
+    DWIN_Frame_AreaCopy(1, 58, 134, 113, 146, LBLX, MBASE(TEMP_CASE_BED));
+#endif
+#if HAS_FAN
+    DWIN_Frame_AreaCopy(1, 115, 134, 172, 146, LBLX, MBASE(TEMP_CASE_FAN));
+#endif
+#if HAS_HOTEND
+    DWIN_Frame_AreaCopy(1, 100, 87, 178, 101, LBLX, MBASE(TEMP_CASE_PLA)); //rock_20210727
+    DWIN_Frame_AreaCopy(1, 180, 87, 260, 100, LBLX, MBASE(TEMP_CASE_ABS));
+#endif
   }
-  else {
-    #ifdef USE_STRING_HEADINGS
-      Draw_Title(GET_TEXT_F(MSG_TEMPERATURE));
-    #else
-      DWIN_Frame_TitleCopy(1, 56, 16, 141, 28);                                       // "Temperature"
-    #endif
-    #ifdef USE_STRING_TITLES
-      #if HAS_HOTEND
-        DWIN_Draw_Label(MBASE(TEMP_CASE_TEMP), GET_TEXT_F(MSG_UBL_SET_TEMP_HOTEND));
-      #endif
-      #if HAS_HEATED_BED
-        DWIN_Draw_Label(MBASE(TEMP_CASE_BED), GET_TEXT_F(MSG_UBL_SET_TEMP_BED));
-      #endif
-      #if HAS_FAN
-        DWIN_Draw_Label(MBASE(TEMP_CASE_FAN), GET_TEXT_F(MSG_FAN_SPEED));
-      #endif
-      #if HAS_HOTEND
-        DWIN_Draw_Label(MBASE(TEMP_CASE_PLA), F("PLA Preheat Settings"));
-        DWIN_Draw_Label(MBASE(TEMP_CASE_ABS), F("ABS Preheat Settings"));
-      #endif
-    #else
-      #if HAS_HOTEND
-        DWIN_Frame_AreaCopy(1, 197, 104, 240, 116, LBLX, MBASE(TEMP_CASE_TEMP));      // Nozzle...
-        DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 46, MBASE(TEMP_CASE_TEMP));     // ...Temperature
-      #endif
-      #if HAS_HEATED_BED
-        DWIN_Frame_AreaCopy(1, 240, 104, 264, 114, LBLX, MBASE(TEMP_CASE_BED));       // Bed...
-        DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 27, MBASE(TEMP_CASE_BED));      // ...Temperature
-      #endif
-      #if HAS_FAN
-        DWIN_Frame_AreaCopy(1, 0, 119, 64, 132, LBLX, MBASE(TEMP_CASE_FAN));          // Fan speed
-      #endif
-      #if HAS_HOTEND
-        DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(TEMP_CASE_PLA));         // Preheat...
-        DWIN_Frame_AreaCopy(1, 157, 76, 181, 86, LBLX + 52, MBASE(TEMP_CASE_PLA));    // ...PLA
-        DWIN_Frame_AreaCopy(1, 131, 119, 182, 132, LBLX + 79, MBASE(TEMP_CASE_PLA));  // PLA setting
-        DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(TEMP_CASE_ABS));         // Preheat...
-        DWIN_Frame_AreaCopy(1, 172, 76, 198, 86, LBLX + 52, MBASE(TEMP_CASE_ABS));    // ...ABS
-        DWIN_Frame_AreaCopy(1, 131, 119, 182, 132, LBLX + 81, MBASE(TEMP_CASE_ABS));  // ABS setting
-      #endif
-    #endif
+  else
+  {
+#ifdef USE_STRING_HEADINGS
+    Draw_Title(GET_TEXT_F(MSG_TEMPERATURE));
+#else
+    DWIN_Frame_TitleCopy(1, 56, 16, 141, 28);                                    // "Temperature"
+#endif
+#ifdef USE_STRING_TITLES
+#if HAS_HOTEND
+    DWIN_Draw_Label(MBASE(TEMP_CASE_TEMP), GET_TEXT_F(MSG_UBL_SET_TEMP_HOTEND));
+#endif
+#if HAS_HEATED_BED
+    DWIN_Draw_Label(MBASE(TEMP_CASE_BED), GET_TEXT_F(MSG_UBL_SET_TEMP_BED));
+#endif
+#if HAS_FAN
+    DWIN_Draw_Label(MBASE(TEMP_CASE_FAN), GET_TEXT_F(MSG_FAN_SPEED));
+#endif
+#if HAS_HOTEND
+    DWIN_Draw_Label(MBASE(TEMP_CASE_PLA), F("PLA Preheat Settings"));
+    DWIN_Draw_Label(MBASE(TEMP_CASE_ABS), F("ABS Preheat Settings"));
+#endif
+#else
+#if HAS_HOTEND
+    //DWIN_Frame_AreaCopy(1, 197, 104, 238, 114, LBLX, MBASE(TEMP_CASE_TEMP));     // Nozzle...
+    DWIN_Frame_AreaCopy(1, 197, 104, 240, 114, LBLX, MBASE(TEMP_CASE_TEMP));     // Nozzle...    
+    DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 46, MBASE(TEMP_CASE_TEMP));    // ...Temperature
+    //DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 44, MBASE(TEMP_CASE_TEMP));    // ...Temperature
+#endif
+#if HAS_HEATED_BED
+    DWIN_Frame_AreaCopy(1, 240, 104, 264, 114, LBLX, MBASE(TEMP_CASE_BED));      // Bed...
+    DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, LBLX + 27, MBASE(TEMP_CASE_BED));     // ...Temperature
+#endif
+#if HAS_FAN
+    DWIN_Frame_AreaCopy(1, 0, 119, 64, 132, LBLX, MBASE(TEMP_CASE_FAN));         // Fan speed
+#endif
+#if HAS_HOTEND
+    DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(TEMP_CASE_PLA));        // Preheat...
+    DWIN_Frame_AreaCopy(1, 157, 76, 181, 86, LBLX + 52, MBASE(TEMP_CASE_PLA));   // ...PLA
+    DWIN_Frame_AreaCopy(1, 131, 119, 182, 132, LBLX + 79, MBASE(TEMP_CASE_PLA)); // PLA setting
+    DWIN_Frame_AreaCopy(1, 107, 76, 156, 86, LBLX, MBASE(TEMP_CASE_ABS));        // Preheat...
+    DWIN_Frame_AreaCopy(1, 172, 76, 198, 86, LBLX + 52, MBASE(TEMP_CASE_ABS));   // ...ABS
+    DWIN_Frame_AreaCopy(1, 131, 119, 182, 132, LBLX + 81, MBASE(TEMP_CASE_ABS)); // ABS setting
+#endif
+#endif
   }
-
   Draw_Back_First(select_temp.now == 0);
   if (select_temp.now) Draw_Menu_Cursor(select_temp.now);
-
   // Draw icons and lines
   uint8_t i = 0;
-  #define _TMENU_ICON(N) Draw_Menu_Line(++i, ICON_SetEndTemp + (N) - 1)
-  #if HAS_HOTEND
-    _TMENU_ICON(TEMP_CASE_TEMP);
-    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.degTargetHotend(0));
-  #endif
-  #if HAS_HEATED_BED
-    _TMENU_ICON(TEMP_CASE_BED);
-    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.degTargetBed());
-  #endif
-  #if HAS_FAN
-    _TMENU_ICON(TEMP_CASE_FAN);
-    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.fan_speed[0]);
-  #endif
-  #if HAS_HOTEND
-    // PLA/ABS items have submenus
-    _TMENU_ICON(TEMP_CASE_PLA);
-    Draw_More_Icon(i);
-    _TMENU_ICON(TEMP_CASE_ABS);
-    Draw_More_Icon(i);
-  #endif
+#define _TMENU_ICON(N) Draw_Menu_Line(++i, ICON_SetEndTemp + (N)-1)
+#if HAS_HOTEND
+  _TMENU_ICON(TEMP_CASE_TEMP);
+  DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.degTargetHotend(0));
+#endif
+#if HAS_HEATED_BED
+  _TMENU_ICON(TEMP_CASE_BED);
+  DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.degTargetBed());
+#endif
+#if HAS_FAN
+  _TMENU_ICON(TEMP_CASE_FAN);
+  DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), thermalManager.fan_speed[0]);
+#endif
+#if HAS_HOTEND
+  // PLA/ABS items have submenus
+  _TMENU_ICON(TEMP_CASE_PLA);
+  Draw_More_Icon(i);
+  _TMENU_ICON(TEMP_CASE_ABS);
+  Draw_More_Icon(i);
+#endif
 }
-
 /* Control */
-void HMI_Control() 
-{
+void HMI_Control() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
-  if (encoder_diffState == ENCODER_DIFF_CW) 
-  {
+  if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_control.inc(1 + CONTROL_CASE_TOTAL)) {
-      if (select_control.now > MROWS && select_control.now > index_control) 
-      {
+      if (select_control.now > MROWS && select_control.now > index_control) {
         index_control = select_control.now;
 
         // Scroll up and draw a blank bottom line
@@ -3259,15 +4977,19 @@ void HMI_Control()
             Draw_Menu_Item(MROWS, ICON_AdvSet, GET_TEXT(MSG_ADVANCED_SETTINGS), true);
             break;
         */
+        case CONTROL_CASE_RESET: // 107011 -20210924
+          Item_Control_ResumeEEPROM(MBASE(MROWS));
+          Draw_Menu_Icon(MROWS, ICON_ResumeEEPROM);
+          break;
           case CONTROL_CASE_INFO:    // Info >
             Item_Control_Info(MBASE(MROWS));
             Draw_Menu_Icon(MROWS, ICON_Info);
             break;
           default: break;
         }
-
       }
-      else {
+      else
+      {
         Move_Highlight(1, select_control.now + MROWS - index_control);
       }
     }
@@ -3280,24 +5002,24 @@ void HMI_Control()
         switch (index_control) {  // First menu items
           case MROWS :
           Draw_Back_First();
-            break;
-          case MROWS + 1: // Temperature >
-            // Draw_Menu_Line(0, ICON_Temperature, GET_TEXT(MSG_TEMPERATURE), true);
-            // DWIN_Frame_AreaCopy(1,  57, 104,  84, 116, LBLX, CLINE(CONTROL_CASE_TEMP));   // Temperature >
-            if (HMI_IsChinese())
-            {
-              Draw_Menu_Icon(0, ICON_Temperature);
-              Draw_More_Icon(0);
-              DWIN_Frame_AreaCopy(1, 57, 104,  84, 116, 60, 53);
-              DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
-            }
-            else
-            {
-              Draw_Menu_Icon(0, ICON_Temperature);
-              Draw_More_Icon(0);
-              DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, 60, 53);   //DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, LBLX, CLINE(CONTROL_CASE_TEMP)); 
-              DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
-            }
+          break;
+        case MROWS + 1: // Temperature >
+          // Draw_Menu_Line(0, ICON_Temperature, GET_TEXT(MSG_TEMPERATURE), true);
+          // DWIN_Frame_AreaCopy(1,  57, 104,  84, 116, LBLX, CLINE(CONTROL_CASE_TEMP));   // Temperature >
+          if (HMI_IsChinese())
+          {
+            Draw_Menu_Icon(0, ICON_Temperature);
+            Draw_More_Icon(0);
+            DWIN_Frame_AreaCopy(1, 57, 104, 84, 116, 60, 53);
+            DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
+          }
+          else
+          {
+            Draw_Menu_Icon(0, ICON_Temperature);
+            Draw_More_Icon(0);
+            DWIN_Frame_AreaCopy(1, 1, 89, 83, 101, 60, 53); //DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, LBLX, CLINE(CONTROL_CASE_TEMP));
+            DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
+          }
 
             break;
           case MROWS + 2: // Move >
@@ -3337,6 +5059,15 @@ void HMI_Control()
           const bool success = settings.load();
           HMI_AudioFeedback(success);
         } break;
+
+        #if HAS_CUTTER
+          case CONTROL_CASE_SW_LASER: // 107011 -20210924 切换到Laser
+            checkkey = Laser_Fdm_Sw_Warning;
+            select_laser_fdm.reset();
+            Draw_Laser_Fdm_Sw_Warning();
+          break;
+        #endif
+
         case CONTROL_CASE_RESET: // Reset EEPROM
           HMI_ResetLanguage();
           settings.reset();
@@ -3361,8 +5092,120 @@ void HMI_Control()
   }
   DWIN_UpdateLCD();
 }
+#if HAS_CUTTER
+//107011 -20210910 激光模式
+/* Control */
+void HMI_Laser_Control() {
+  ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  // Avoid flicker by updating only the previous menu
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_control.inc(1 + CONTROL_LASER_CASE_TOTAL)) {
+      if (select_control.now > MROWS && select_control.now > index_control) {
+        index_control = select_control.now;
+        // Scroll up and draw a blank bottom line
+        Scroll_Menu(DWIN_SCROLL_UP);
+        switch (index_control) {  // Last menu items
+          case CONTROL_LASER_CASE_INFO:    // Info >
+            Item_Control_Info(MBASE(MROWS));
+            Draw_Menu_Icon(MROWS, ICON_Info);
+            break;
+          default: break;
+        }
+      }
+      else
+      {
+        Move_Highlight(1, select_control.now + MROWS - index_control);
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+  {
+    if (select_control.dec())
+    {
+      if (select_control.now < index_control - MROWS)
+      {
+        index_control--;
+        Scroll_Menu(DWIN_SCROLL_DOWN);
+        switch (index_control)
+        { // First menu items
+        case MROWS:
+          Draw_Back_First();
+          break;
+        case MROWS + 1: // Temperature >
+            // Draw_Menu_Line(0, ICON_Temperature, GET_TEXT(MSG_TEMPERATURE), true);
+            // DWIN_Frame_AreaCopy(1,  57, 104,  84, 116, LBLX, CLINE(CONTROL_CASE_TEMP));   // Temperature >
+          if (HMI_IsChinese())
+            {
+              Draw_Menu_Icon(0, ICON_Temperature);
+              Draw_More_Icon(0);
+              DWIN_Frame_AreaCopy(1, 57, 104,  84, 116, 60, 53);
+              DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
+            }
+            else
+            {
+              Draw_Menu_Icon(0, ICON_Temperature);
+              Draw_More_Icon(0);
+              DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, 60, 53);   //DWIN_Frame_AreaCopy(1,  1, 89,  83, 101, LBLX, CLINE(CONTROL_CASE_TEMP)); 
+              DWIN_Draw_Line(Line_Color, 16, 49 + 33, 256, 49 + 34);
+            }
+            break;
+          case MROWS + 2: // Move >
+            Draw_Menu_Line(0, ICON_Motion, GET_TEXT(MSG_MOTION), true);
+            // DWIN_Frame_AreaCopy(1,  87, 104, 114, 116, 60, 155);   // Motion >
+          default: break;
+        }
+      }
+      else {
+        Move_Highlight(-1, select_control.now + MROWS - index_control);
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+    switch (select_control.now) {
+      case 0: // Back
+        select_page.set(2);
+        Goto_MainMenu();
+        break;
+      #if ENABLED(EEPROM_SETTINGS)
+        case CONTROL_LASER_CASE_SAVE: { // Write EEPROM
+          const bool success = settings.save();
+          HMI_AudioFeedback(success);
+        } break;
+        case CONTROL_LASER_CASE_LOAD: { // Read EEPROM
+          const bool success = settings.load();
+          HMI_AudioFeedback(success);
+        } break;
+        case CONTROL_LASER_CASE_RESET: // Reset EEPROM
 
-
+          HMI_ResetLanguage();
+          settings.reset();
+          HMI_AudioFeedback();
+          settings.save();
+          delay(300);
+          break;
+      #endif
+        case CONTROL_LASER_CASE_FDM: // 107011 -20210918
+          checkkey = Laser_Fdm_Sw_Warning;
+		      select_laser_fdm.reset();
+          Draw_Laser_Fdm_Sw_Warning();
+        break;
+        case CONTROL_LASER_CASE_MOVE: // Motion
+        checkkey = Motion;
+        select_motion.reset();
+        //Draw_Motion_Menu();
+        Draw_Laser_Motion_Menu();
+        break;
+      case CONTROL_LASER_CASE_INFO: // Info
+        checkkey = Info;
+        Draw_Info_Menu();
+        break;
+      default: break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+#endif //#if HAS_CUTTER
 #if HAS_ONESTEP_LEVELING
 
   /* Leveling */
@@ -3372,15 +5215,12 @@ void HMI_Control()
     // thermalManager.disable_all_heaters();  //rock_20211223
     queue.inject_P(PSTR("G28""\n""G29"));
   }
-
 #endif
-
 /* Axis Move */
-void HMI_AxisMove() 
+void HMI_AxisMove()
 {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   #if ENABLED(PREVENT_COLD_EXTRUSION)
     // popup window resume
     if (HMI_flag.ETempTooLow_flag) 
@@ -3405,7 +5245,6 @@ void HMI_AxisMove()
       }      
     }
   #endif
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_axis.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_axis.now);
@@ -3424,7 +5263,7 @@ void HMI_AxisMove()
       case 1: // X axis move
         checkkey = Move_X;
         HMI_ValueStruct.Move_X_scaled = current_position.x * MINUNITMULT;
-       // DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Select_Color, 3, 1, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
+        //DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Select_Color, 3, 1, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
         DWIN_Draw_Signed_Float(font8x16,Select_Color, 3, UNITFDIGITS, 216,  MBASE(1), HMI_ValueStruct.Move_X_scaled);
         EncoderRate.enabled = true;
         break;
@@ -3464,14 +5303,75 @@ void HMI_AxisMove()
   }
   DWIN_UpdateLCD();
 }
-
-/* TemperatureID */
-void HMI_Temperature() {
+#if HAS_CUTTER
+//107011 -20210910 激光模式
+/* Axis Move */
+void HMI_Laser_AxisMove() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
+  #if ENABLED(PREVENT_COLD_EXTRUSION)
+    // popup window resume
+    if (HMI_flag.ETempTooLow_flag) {
+      if (encoder_diffState == ENCODER_DIFF_ENTER) {
+        HMI_flag.ETempTooLow_flag = false;
+        HMI_ValueStruct.Move_E_scaled = current_position.e * MINUNITMULT;
+        Draw_Move_Menu();
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
+        DWIN_Draw_Signed_Float(font8x16, Color_Bg_Black, 3, 1, 216, MBASE(4), 0);
+        DWIN_UpdateLCD();
+      }
+      return;
+    }
+  #endif
   // Avoid flicker by updating only the previous menu
-  if (encoder_diffState == ENCODER_DIFF_CW) 
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_axis.inc(1 + 3 )) Move_Highlight(1, select_axis.now);
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW) {
+    if (select_axis.dec()) Move_Highlight(-1, select_axis.now);
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+    switch (select_axis.now) {
+      case 0: // Back
+        //107011 -20210910 激光模式
+        checkkey = Laser_Prepare;
+        select_prepare.set(1);
+        index_prepare = MROWS;
+        // 107011 -20210910 激光模式
+        Draw_Laser_Prepare_Menu();
+        break;
+      case 1: // X axis move
+        checkkey = Move_X;
+        HMI_ValueStruct.Move_X_scaled = current_position.x * MINUNITMULT;
+        DWIN_Draw_Signed_Float(font8x16,Select_Color, 3, UNITFDIGITS, 216,  MBASE(1), HMI_ValueStruct.Move_X_scaled);
+        EncoderRate.enabled = true;
+        break;
+      case 2: // Y axis move
+        checkkey = Move_Y;
+        HMI_ValueStruct.Move_Y_scaled = current_position.y * MINUNITMULT;
+        DWIN_Draw_Signed_Float(font8x16,Select_Color, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+        EncoderRate.enabled = true;
+        break;
+      case 3: // Z axis move
+        checkkey = Move_Z;
+        HMI_ValueStruct.Move_Z_scaled = current_position.z * MINUNITMULT;
+        DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
+        EncoderRate.enabled = true;
+        break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+#endif //#if HAS_CUTTER
+/* TemperatureID */
+void HMI_Temperature()
+{
+  ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  // Avoid flicker by updating only the previous menu
+  if (encoder_diffState == ENCODER_DIFF_CW)
   {
     if (select_temp.inc(1 + TEMP_CASE_TOTAL)) Move_Highlight(1, select_temp.now);
   }
@@ -3516,9 +5416,7 @@ void HMI_Temperature() {
           checkkey = PLAPreheat;
           select_PLA.reset();
           HMI_ValueStruct.show_mode = -2;
-
           Clear_Main_Window();
-
           if (HMI_IsChinese()) {
             DWIN_Frame_TitleCopy(1, 59, 16, 139, 29);                                         // "PLA Settings"
             DWIN_Frame_AreaCopy(1, 100, 89, 124, 101, LBLX, MBASE(PREHEAT_CASE_TEMP));
@@ -3571,33 +5469,36 @@ void HMI_Temperature() {
             #endif
           }
 
-          Draw_Back_First();
+      Draw_Back_First();
 
-          uint8_t i = 0;
-          Draw_Menu_Line(++i, ICON_SetEndTemp);
-          DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].hotend_temp);
-          #if HAS_HEATED_BED
-            Draw_Menu_Line(++i, ICON_SetBedTemp);
-            DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].bed_temp);
-          #endif
-          #if HAS_FAN
-            Draw_Menu_Line(++i, ICON_FanSpeed);
-            DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].fan_speed);
-          #endif
-          #if ENABLED(EEPROM_SETTINGS)
-            Draw_Menu_Line(++i, ICON_WriteEEPROM);
-          #endif
-        } break;
+      uint8_t i = 0;
+      Draw_Menu_Line(++i, ICON_SetEndTemp);
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].hotend_temp);
+#if HAS_HEATED_BED
+      Draw_Menu_Line(++i, ICON_SetBedTemp);
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].bed_temp);
+#endif
+#if HAS_FAN
+      Draw_Menu_Line(++i, ICON_FanSpeed);
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[0].fan_speed);
+#endif
+#if ENABLED(EEPROM_SETTINGS)
+      Draw_Menu_Line(++i, ICON_WriteEEPROM);
+#endif
+    }
+    break;
 
-        case TEMP_CASE_ABS: { // ABS preheat setting
-          checkkey = ABSPreheat;
-          select_ABS.reset();
-          HMI_ValueStruct.show_mode = -3;
+    case TEMP_CASE_ABS:
+    { // ABS preheat setting
+      checkkey = ABSPreheat;
+      select_ABS.reset();
+      HMI_ValueStruct.show_mode = -3;
 
-          Clear_Main_Window();
+      Clear_Main_Window();
 
-          if (HMI_IsChinese()) {
-            DWIN_Frame_TitleCopy(1, 142, 16, 223, 29);                                        // "ABS Settings"
+      if (HMI_IsChinese())
+      {
+        DWIN_Frame_TitleCopy(1, 142, 16, 223, 29); // "ABS Settings"
 
             DWIN_Frame_AreaCopy(1, 180, 89, 204, 100, LBLX, MBASE(PREHEAT_CASE_TEMP));
             DWIN_Frame_AreaCopy(1, 1, 134, 56, 146, LBLX + 24, MBASE(PREHEAT_CASE_TEMP));    // ABS nozzle temp
@@ -3650,9 +5551,7 @@ void HMI_Temperature() {
               #endif
             #endif
           }
-
           Draw_Back_First();
-
           uint8_t i = 0;
           Draw_Menu_Line(++i, ICON_SetEndTemp);
           DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, 216, MBASE(i), ui.material_preset[1].hotend_temp);
@@ -3667,34 +5566,36 @@ void HMI_Temperature() {
           #if ENABLED(EEPROM_SETTINGS)
             Draw_Menu_Line(++i, ICON_WriteEEPROM);
           #endif
-
         } break;
-
       #endif // HAS_HOTEND
     }
   }
   DWIN_UpdateLCD();
 }
-
 void Draw_Max_Speed_Menu() {
   Clear_Main_Window();
-
   if (HMI_IsChinese()) {
     DWIN_Frame_TitleCopy(1, 1, 16, 28, 28); // "Max Speed (mm/s)"
-
-    auto say_max_speed = [](const uint16_t row) {
-      DWIN_Frame_AreaCopy(1, 173, 133, 228, 147, LBLX, row);              // "Max speed"
+    auto say_max_speed = [](const uint16_t row)
+    {
+      DWIN_Frame_AreaCopy(1, 173, 133, 228, 147, LBLX, row); // "Max speed"
     };
-
     say_max_speed(MBASE(1));                                              // "Max speed"
     DWIN_Frame_AreaCopy(1, 58, 120, 65, 131, LBLX + 58, MBASE(1)+3);      // X  rock_20210919
     say_max_speed(MBASE(2));                                              // "Max speed"
     DWIN_Frame_AreaCopy(1, 1, 150, 7, 160, LBLX + 58, MBASE(2) + 3);      // Y
     say_max_speed(MBASE(3));                                              // "Max speed"
     DWIN_Frame_AreaCopy(1, 9, 150, 16, 160, LBLX + 58, MBASE(3) + 3);     // Z
+    
     #if HAS_HOTEND
-      say_max_speed(MBASE(4));                                            // "Max speed"
-      DWIN_Frame_AreaCopy(1, 18, 150, 25, 160, LBLX + 58, MBASE(4) + 3);  // E
+      #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()){
+      }else
+      #endif
+      {
+        say_max_speed(MBASE(4));                                            // "Max speed"
+        DWIN_Frame_AreaCopy(1, 18, 150, 25, 160, LBLX + 58, MBASE(4) + 3);  // E
+      }
     #endif
   }
   else {
@@ -3708,57 +5609,90 @@ void Draw_Max_Speed_Menu() {
       DWIN_Draw_Label(MBASE(2), F("Max Feedrate Y"));
       DWIN_Draw_Label(MBASE(3), F("Max Feedrate Z"));
       #if HAS_HOTEND
-        DWIN_Draw_Label(MBASE(4), F("Max Feedrate E"));
+        #if HAS_CUTTER // 107011 -20210918
+        if(laser_device.is_laser_device()){
+        }else
+        #endif
+        {
+          DWIN_Draw_Label(MBASE(4), F("Max Feedrate E"));
+        }
       #endif
     #else
       draw_max_en(MBASE(1));          // "Max"
       DWIN_Frame_AreaCopy(1, 184, 119, 234, 132, LBLX + 30, MBASE(1)); // "Speed X"
 
-      draw_max_en(MBASE(2));          // "Max"
-      draw_speed_en(27, MBASE(2));    // "Speed" rock_20210919
-      say_y(78, MBASE(2));            // "Y"
+    draw_max_en(MBASE(2));       // "Max"
+    draw_speed_en(27, MBASE(2)); // "Speed" rock_20210919
+    say_y(78, MBASE(2));         // "Y"
 
-      draw_max_en(MBASE(3));          // "Max"
-      draw_speed_en(27, MBASE(3));    // "Speed"
-      say_z(78, MBASE(3));            // "Z"
+    draw_max_en(MBASE(3));       // "Max"
+    draw_speed_en(27, MBASE(3)); // "Speed"
+    say_z(78, MBASE(3));         // "Z"
 
       #if HAS_HOTEND
-        draw_max_en(MBASE(4));        // "Max"
-        draw_speed_en(27, MBASE(4));  // "Speed"
-        say_e(78, MBASE(4));          // "E"
+        #if HAS_CUTTER // 107011 -20210918
+        if(laser_device.is_laser_device()){
+        }else
+        #endif
+        {
+          draw_max_en(MBASE(4));        // "Max"
+          draw_speed_en(27, MBASE(4));  // "Speed"
+          say_e(78, MBASE(4));          // "E"
+        }
       #endif
     #endif
   }
-
   Draw_Back_First();
-  LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxSpeedX + i);
+    #if HAS_CUTTER // 107011 -20210918
+    if(laser_device.is_laser_device()){
+      LOOP_L_N(i, 3) Draw_Menu_Line(i + 1, ICON_MaxSpeedX + i);
+    }else
+    #endif
+    {
+      LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxSpeedX + i);
+    }
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(1), planner.settings.max_feedrate_mm_s[X_AXIS]);
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(2), planner.settings.max_feedrate_mm_s[Y_AXIS]);
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(3), planner.settings.max_feedrate_mm_s[Z_AXIS]);
   #if HAS_HOTEND
-    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(4), planner.settings.max_feedrate_mm_s[E_AXIS]);
+    #if HAS_CUTTER // 107011 -20210918
+    if(laser_device.is_laser_device()){
+      
+    }else
+    #endif
+    {
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(4), planner.settings.max_feedrate_mm_s[E_AXIS]);
+    }
   #endif
 }
 
-void Draw_Max_Accel_Menu() {
+void Draw_Max_Accel_Menu()
+{
   Clear_Main_Window();
 
-  if (HMI_IsChinese()) {
+  if (HMI_IsChinese())
+  {
     DWIN_Frame_TitleCopy(1, 1, 16, 28, 28); // "Acceleration"
 
     DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(1));
     DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(1) + 1);
-    DWIN_Frame_AreaCopy(1, 58, 120, 65, 131, LBLX +  + 71, MBASE(1)+3);   // Max acceleration X
+    DWIN_Frame_AreaCopy(1, 58, 120, 65, 131, LBLX + +71, MBASE(1) + 3); // Max acceleration X
     DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(2));
     DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(2) + 1);
-    DWIN_Frame_AreaCopy(1, 1, 150, 7, 160, LBLX + 71, MBASE(2) + 2);   // Max acceleration Y
+    DWIN_Frame_AreaCopy(1, 1, 150, 7, 160, LBLX + 71, MBASE(2) + 2); // Max acceleration Y
     DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(3));
     DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(3) + 1);
     DWIN_Frame_AreaCopy(1, 9, 150, 16, 160, LBLX + 71, MBASE(3) + 2);  // Max acceleration Z
     #if HAS_HOTEND
-      DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(4));
-      DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(4) + 1);
-      DWIN_Frame_AreaCopy(1, 18, 150, 25, 160, LBLX + 71, MBASE(4) + 2); // Max acceleration E
+      #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()){
+      }else
+      #endif
+      {
+        DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX, MBASE(4));
+        DWIN_Frame_AreaCopy(1, 28, 149, 69, 161, LBLX + 27, MBASE(4) + 1);
+        DWIN_Frame_AreaCopy(1, 18, 150, 25, 160, LBLX + 71, MBASE(4) + 2); // Max acceleration E
+      }
     #endif
   }
   else {
@@ -3772,34 +5706,57 @@ void Draw_Max_Accel_Menu() {
       DWIN_Draw_Label(MBASE(2), F("Max Accel Y"));
       DWIN_Draw_Label(MBASE(3), F("Max Accel Z"));
       #if HAS_HOTEND
-        DWIN_Draw_Label(MBASE(4), F("Max Accel E"));
+        #if HAS_CUTTER // 107011 -20210918
+        if(laser_device.is_laser_device()){
+        }else
+        #endif
+        {
+          DWIN_Draw_Label(MBASE(4), F("Max Accel E"));
+        }
       #endif
     #else
       draw_max_accel_en(MBASE(1)); say_x(110, MBASE(1));  // "Max Acceleration X"
       draw_max_accel_en(MBASE(2)); say_y(110, MBASE(2));  // "Max Acceleration Y"
       draw_max_accel_en(MBASE(3)); say_z(110, MBASE(3));  // "Max Acceleration Z"
       #if HAS_HOTEND
-        draw_max_accel_en(MBASE(4)); say_e(110, MBASE(4)); // "Max Acceleration E"
+        #if HAS_CUTTER // 107011 -20210918
+        if(laser_device.is_laser_device()){
+        }else
+        #endif
+        {
+          draw_max_accel_en(MBASE(4)); say_e(110, MBASE(4)); // "Max Acceleration E"
+        }
       #endif
     #endif
   }
   Draw_Back_First();
-  LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxAccX + i);
+    #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()){
+        LOOP_L_N(i, 3) Draw_Menu_Line(i + 1, ICON_MaxAccX + i);
+      }else
+      #endif
+      {
+        LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxAccX + i);
+      }
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(1), planner.settings.max_acceleration_mm_per_s2[X_AXIS]);
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(2), planner.settings.max_acceleration_mm_per_s2[Y_AXIS]);
   DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(3), planner.settings.max_acceleration_mm_per_s2[Z_AXIS]);
   #if HAS_HOTEND
-    DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(4), planner.settings.max_acceleration_mm_per_s2[E_AXIS]); //rock_20211009
+    #if HAS_CUTTER // 107011 -20210918
+    if(laser_device.is_laser_device()){
+    }else
+    #endif
+    {
+      DWIN_Draw_IntValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 4, 210, MBASE(4), planner.settings.max_acceleration_mm_per_s2[E_AXIS]); //rock_20211009
+    }
   #endif
 }
-
 #if HAS_CLASSIC_JERK
   void Draw_Max_Jerk_Menu() 
   {
     Clear_Main_Window();
     if (HMI_IsChinese()) {
       DWIN_Frame_TitleCopy(1, 1, 16, 28, 28); // "Jerk"
-
       DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX     , MBASE(1));
       DWIN_Frame_AreaCopy(1,   1, 180,  28, 192, LBLX + 27, MBASE(1) + 1);
       DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 53, MBASE(1));
@@ -3813,10 +5770,16 @@ void Draw_Max_Accel_Menu() {
       DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 53, MBASE(3));
       DWIN_Frame_AreaCopy(1,   9, 150,  16, 160, LBLX + 83, MBASE(3) + 3);    // Max Jerk speed Z
       #if HAS_HOTEND
-        DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX     , MBASE(4));
-        DWIN_Frame_AreaCopy(1,   1, 180,  28, 192, LBLX + 27, MBASE(4) + 1);
-        DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 53, MBASE(4));
-        DWIN_Frame_AreaCopy(1,  18, 150,  25, 160, LBLX + 83, MBASE(4) + 3);  // Max Jerk speed E
+        #if HAS_CUTTER // 107011 -20210918
+        if(laser_device.is_laser_device()){ //激光界面不需要Max Jerk speed E
+        }else
+        #endif
+        {
+          DWIN_Frame_AreaCopy(1, 173, 133, 200, 147, LBLX     , MBASE(4));
+          DWIN_Frame_AreaCopy(1,   1, 180,  28, 192, LBLX + 27, MBASE(4) + 1);
+          DWIN_Frame_AreaCopy(1, 202, 133, 228, 147, LBLX + 53, MBASE(4));
+          DWIN_Frame_AreaCopy(1,  18, 150,  25, 160, LBLX + 83, MBASE(4) + 3);  // Max Jerk speed E
+        }
       #endif
     }
     else {
@@ -3830,7 +5793,13 @@ void Draw_Max_Accel_Menu() {
         DWIN_Draw_Label(MBASE(2), F("Max Jerk Y"));
         DWIN_Draw_Label(MBASE(3), F("Max Jerk Z"));
         #if HAS_HOTEND
-          DWIN_Draw_Label(MBASE(4), F("Max Jerk E"));
+          #if HAS_CUTTER // 107011 -20210918
+          if(laser_device.is_laser_device()){
+          }else
+          #endif
+          {
+            DWIN_Draw_Label(MBASE(4), F("Max Jerk E"));
+          }
         #endif
       #else
         draw_max_en(MBASE(1));          // "Max"
@@ -3839,35 +5808,53 @@ void Draw_Max_Accel_Menu() {
         //draw_speed_en(80, MBASE(1));    // "Speed"
         say_x(115+6, MBASE(1));           // "X"
 
-        draw_max_en(MBASE(2));          // "Max"
-        draw_jerk_en(MBASE(2));         // "Jerk"
-        //draw_speed_en(80, MBASE(2));    // "Speed"
-        DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(2)); // "Speed"
-        say_y(115+6, MBASE(2));           // "Y"
+    draw_max_en(MBASE(2));  // "Max"
+    draw_jerk_en(MBASE(2)); // "Jerk"
+    //draw_speed_en(80, MBASE(2));    // "Speed"
+    DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(2)); // "Speed"
+    say_y(115 + 6, MBASE(2));                                        // "Y"
 
-        draw_max_en(MBASE(3));          // "Max"
-        draw_jerk_en(MBASE(3));         // "Jerk"
-        //draw_speed_en(80, MBASE(3));    // "Speed"
-        DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(3)); // "Speed"
-        say_z(115+6, MBASE(3));           // "Z"
+    draw_max_en(MBASE(3));  // "Max"
+    draw_jerk_en(MBASE(3)); // "Jerk"
+    //draw_speed_en(80, MBASE(3));    // "Speed"
+    DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(3)); // "Speed"
+    say_z(115 + 6, MBASE(3));                                        // "Z"
 
         #if HAS_HOTEND
-          draw_max_en(MBASE(4));        // "Max"
-          draw_jerk_en(MBASE(4));       // "Jerk"
-          //draw_speed_en(72, MBASE(4));  // "Speed"
-          DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(4)); // "Speed"
-          say_e(115+6, MBASE(4));         // "E"
+          #if HAS_CUTTER // 107011 -20210918
+          if(laser_device.is_laser_device()){
+          }else
+          #endif
+          {
+            draw_max_en(MBASE(4));        // "Max"
+            draw_jerk_en(MBASE(4));       // "Jerk"
+            //draw_speed_en(72, MBASE(4));  // "Speed"
+            DWIN_Frame_AreaCopy(1, 184, 119, 224, 132, LBLX + 77, MBASE(4)); // "Speed"
+            say_e(115+6, MBASE(4));         // "E"
+          }
         #endif
       #endif
     }
-
     Draw_Back_First();
-    LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxSpeedJerkX + i);
+      #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()){
+        LOOP_L_N(i, 3 ) Draw_Menu_Line(i + 1, ICON_MaxSpeedJerkX + i);
+      }else
+      #endif
+      {
+        LOOP_L_N(i, 3 + ENABLED(HAS_HOTEND)) Draw_Menu_Line(i + 1, ICON_MaxSpeedJerkX + i);
+      }
     DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 210, MBASE(1), planner.max_jerk[X_AXIS] * MINUNITMULT+0.0002);
     DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 210, MBASE(2), planner.max_jerk[Y_AXIS] * MINUNITMULT+0.0002);
     DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 210, MBASE(3), planner.max_jerk[Z_AXIS] * MINUNITMULT+0.0002);
     #if HAS_HOTEND
-      DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 210, MBASE(4), planner.max_jerk[E_AXIS] * MINUNITMULT+0.0002);
+      #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()){
+      }else
+      #endif
+      {
+        DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3, UNITFDIGITS, 210, MBASE(4), planner.max_jerk[E_AXIS] * MINUNITMULT+0.0002);
+      }
     #endif
   }
 #endif
@@ -3923,16 +5910,20 @@ void Draw_Steps_Menu()
     DWIN_Draw_FloatValue(true, true, 0, font8x16, Color_White, Color_Bg_Black, 3,UNITFDIGITS, 210, MBASE(4), (planner.settings.axis_steps_per_mm[E_AXIS] * MINUNITMULT+0.0002));
   #endif
 }
-
 /* Motion */
-void HMI_Motion() 
-{
+void HMI_Motion() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
-    if (select_motion.inc(1 + MOTION_CASE_TOTAL)) Move_Highlight(1, select_motion.now);
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device()) { 
+      if (select_motion.inc(1 + MOTION_LASER_CASE_TOTAL)) Move_Highlight(1, select_motion.now);
+    }else
+    #endif//#if HAS_CUTTER
+    {
+      if (select_motion.inc(1 + MOTION_CASE_TOTAL)) Move_Highlight(1, select_motion.now);
+    }
   }
   else if (encoder_diffState == ENCODER_DIFF_CCW) {
     if (select_motion.dec()) Move_Highlight(-1, select_motion.now);
@@ -3940,10 +5931,20 @@ void HMI_Motion()
   else if (encoder_diffState == ENCODER_DIFF_ENTER) {
     switch (select_motion.now) {
       case 0: // Back
-        checkkey = Control;
-        select_control.set(CONTROL_CASE_MOVE);
         index_control = MROWS;
-        Draw_Control_Menu();
+		    //107011 -20210910 激光模式
+        #if HAS_CUTTER
+		    if(laser_device.is_laser_device()) { 
+          checkkey = Laser_Control;
+          select_control.set(CONTROL_LASER_CASE_MOVE);
+          Draw_Laser_Control_Menu();
+        }else
+        #endif//#if HAS_CUTTER
+        { 
+          checkkey = Control;
+          select_control.set(CONTROL_CASE_MOVE);
+          Draw_Control_Menu();
+        }
         break;
       case MOTION_CASE_RATE:   // Max speed
         checkkey = MaxSpeed;
@@ -3972,25 +5973,66 @@ void HMI_Motion()
   }
   DWIN_UpdateLCD();
 }
-
+//test_current
+#if HAS_CUTTER
+/* Motion */
+void HMI_Laser_Motion() {
+  ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  // Avoid flicker by updating only the previous menu
+  if (encoder_diffState == ENCODER_DIFF_CW) {
+    if (select_motion.inc(1 + MOTION_CASE_TOTAL)) Move_Highlight(1, select_motion.now);
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW) {
+    switch (select_motion.now) {
+      case 0: // Back
+		    //107011 -20210910 激光模式
+          checkkey = Laser_Control;
+          select_control.set(CONTROL_LASER_CASE_MOVE);
+          Draw_Laser_Control_Menu();
+        break;
+      case MOTION_CASE_RATE:   // Max speed
+        checkkey = MaxSpeed;
+        select_speed.reset();
+        Draw_Max_Speed_Menu();
+        break;
+      case MOTION_CASE_ACCEL:  // Max acceleration
+        checkkey = MaxAcceleration;
+        select_acc.reset();
+        Draw_Max_Accel_Menu();
+        break;
+      #if HAS_CLASSIC_JERK
+        case MOTION_CASE_JERK: // Max jerk
+          checkkey = MaxJerk;
+          select_jerk.reset();
+          Draw_Max_Jerk_Menu();
+         break;
+      #endif
+      case MOTION_CASE_STEPS:  // Steps per mm
+        checkkey = Step;
+        select_step.reset();
+        Draw_Steps_Menu();
+        break;
+      default: break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+#endif
 /* Advanced Settings */
 void HMI_AdvSet() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_advset.inc(1 + ADVSET_CASE_TOTAL)) {
       if (select_advset.now > MROWS && select_advset.now > index_advset) {
         index_advset = select_advset.now;
-
         // Scroll up and draw a blank bottom line
         Scroll_Menu(DWIN_SCROLL_UP);
-
         //switch (index_advset) {  // Redraw last menu items
         //  default: break;
         //}
-
       }
       else {
         Move_Highlight(1, select_advset.now + MROWS - index_advset);
@@ -4002,7 +6044,6 @@ void HMI_AdvSet() {
       if (select_advset.now < index_advset - MROWS) {
         index_advset--;
         Scroll_Menu(DWIN_SCROLL_DOWN);
-
         //switch (index_advset) {  // Redraw first menu items
         //  default: break;
         //}
@@ -4022,7 +6063,6 @@ void HMI_AdvSet() {
         Draw_Control_Menu();
         */
         break;
-
       #if HAS_HOME_OFFSET
         case ADVSET_CASE_HOMEOFF:   // Home Offsets
           checkkey = HomeOff;
@@ -4033,7 +6073,6 @@ void HMI_AdvSet() {
           Draw_HomeOff_Menu();
           break;
       #endif
-
       #if HAS_ONESTEP_LEVELING
         case ADVSET_CASE_PROBEOFF:   // Probe Offsets
           checkkey = ProbeOff;
@@ -4043,21 +6082,18 @@ void HMI_AdvSet() {
           Draw_ProbeOff_Menu();
           break;
       #endif
-
       #if HAS_HOTEND
         case ADVSET_CASE_HEPID:   // Nozzle PID Autotune
           thermalManager.setTargetHotend(ui.material_preset[0].hotend_temp, 0);
           thermalManager.PID_autotune(ui.material_preset[0].hotend_temp, H_E0, 10, true);
           break;
       #endif
-
       #if HAS_HEATED_BED
         case ADVSET_CASE_BEDPID:  // Bed PID Autotune
           thermalManager.setTargetBed(ui.material_preset[0].bed_temp);
           thermalManager.PID_autotune(ui.material_preset[0].bed_temp, H_BED, 10, true);
           break;
       #endif
-
       #if ENABLED(POWER_LOSS_RECOVERY)
         case ADVSET_CASE_PWRLOSSR:  // Power-loss recovery
           recovery.enable(!recovery.enabled);
@@ -4069,14 +6105,11 @@ void HMI_AdvSet() {
   }
   DWIN_UpdateLCD();
 }
-
 #if HAS_HOME_OFFSET
-
   /* Home Offset */
   void HMI_HomeOff() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
-
     // Avoid flicker by updating only the previous menu
     if (encoder_diffState == ENCODER_DIFF_CW) {
       if (select_item.inc(1 + 3)) Move_Highlight(1, select_item.now);
@@ -4111,7 +6144,6 @@ void HMI_AdvSet() {
     }
     DWIN_UpdateLCD();
   }
-
   void HMI_HomeOffN(const AxisEnum axis, float &posScaled, const_float_t lo, const_float_t hi) {
     ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
     if (encoder_diffState != ENCODER_DIFF_NO) {
@@ -4126,19 +6158,15 @@ void HMI_AdvSet() {
       DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(select_item.now), posScaled);
     }
   }
-
   void HMI_HomeOffX() { HMI_HomeOffN(X_AXIS, HMI_ValueStruct.Home_OffX_scaled, -500, 500); }
   void HMI_HomeOffY() { HMI_HomeOffN(Y_AXIS, HMI_ValueStruct.Home_OffY_scaled, -500, 500); }
   void HMI_HomeOffZ() { HMI_HomeOffN(Z_AXIS, HMI_ValueStruct.Home_OffZ_scaled,  -20,  20); }
-
 #endif // HAS_HOME_OFFSET
-
 #if HAS_ONESTEP_LEVELING
   /*Probe Offset */
   void HMI_ProbeOff() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
-
     // Avoid flicker by updating only the previous menu
     if (encoder_diffState == ENCODER_DIFF_CW) {
       if (select_item.inc(1 + 2)) Move_Highlight(1, select_item.now);
@@ -4167,7 +6195,6 @@ void HMI_AdvSet() {
     }
     DWIN_UpdateLCD();
   }
-
   void HMI_ProbeOffN(float &posScaled, float &offset_ref) {
     ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
     if (encoder_diffState != ENCODER_DIFF_NO) {
@@ -4182,54 +6209,162 @@ void HMI_AdvSet() {
       DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(select_item.now), posScaled);
     }
   }
-
   void HMI_ProbeOffX() { HMI_ProbeOffN(HMI_ValueStruct.Probe_OffX_scaled, probe.offset.x); }
   void HMI_ProbeOffY() { HMI_ProbeOffN(HMI_ValueStruct.Probe_OffY_scaled, probe.offset.y); }
-
 #endif // HAS_ONESTEP_LEVELING
-
 /* Info */
-void HMI_Info() {
+void HMI_Info()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
   if (encoder_diffState == ENCODER_DIFF_ENTER) {
     #if HAS_ONESTEP_LEVELING
+
+#if HAS_CUTTER
+    //107011 -20210910 激光模式
+    if (laser_device.is_laser_device())
+    {
+      checkkey = Laser_Control;
+      select_control.set(CONTROL_LASER_CASE_INFO);
+      Draw_Laser_Control_Menu();
+    }
+    else
+#endif //#if HAS_CUTTER
+    {
       checkkey = Control;
       select_control.set(CONTROL_CASE_INFO);
       Draw_Control_Menu();
-    #else
-      select_page.set(3);
-      Goto_MainMenu();
-    #endif
+    }
+#else
+    select_page.set(3);
+    Goto_MainMenu();
+#endif
   }
   DWIN_UpdateLCD();
 }
-
-/* Tune */
-void HMI_Tune() {
+// 107011 -20210910 激光模式下打印里的设置界面
+#if HAS_CUTTER
+void HMI_Laser_Tune()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
-  // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
-    if (select_tune.inc(1 + TUNE_CASE_TOTAL)) {
+    if (select_tune.inc(1 + TUNE_CASE_LASER_TOTAL)) {
       if (select_tune.now > MROWS && select_tune.now > index_tune) {
         index_tune = select_tune.now;
         Scroll_Menu(DWIN_SCROLL_UP);
       }
-      else {
+      else
+      {
         Move_Highlight(1, select_tune.now + MROWS - index_tune);
       }
     }
   }
-  else if (encoder_diffState == ENCODER_DIFF_CCW) {
-    if (select_tune.dec()) {
-      if (select_tune.now < index_tune - MROWS) {
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+  {
+    if (select_tune.dec())
+    {
+      if (select_tune.now < index_tune - MROWS)
+      {
         index_tune--;
         Scroll_Menu(DWIN_SCROLL_DOWN);
         if (index_tune == MROWS) Draw_Back_First();
       }
-      else {
+      else
+      {
+        Move_Highlight(-1, select_tune.now + MROWS - index_tune);
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_ENTER)
+  {
+    switch (select_tune.now)
+    {
+    case 0:
+    { // Back
+      select_print.set(0);
+      Goto_PrintProcess();
+    }
+    break;
+    case TUNE_CASE_LASER_XMOVE:
+      if(laser_device.is_run_range) break;
+      checkkey = Tune_Move_X;
+      HMI_ValueStruct.Move_X_scaled = current_position.x * MINUNITMULT;
+      DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(1), HMI_ValueStruct.Move_X_scaled);
+      EncoderRate.enabled = true;
+      break;
+    case TUNE_CASE_LASER_YMOVE:
+      if(laser_device.is_run_range) break;
+      checkkey = Tune_Move_Y;
+      HMI_ValueStruct.Move_Y_scaled = current_position.y * MINUNITMULT;
+      DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(2), HMI_ValueStruct.Move_Y_scaled);
+      EncoderRate.enabled = true;
+      break;
+    case TUNE_CASE_LASER_ZMOVE:
+      if(laser_device.is_run_range) break;
+      checkkey = Tune_Move_Z;
+      HMI_ValueStruct.Move_Z_scaled = current_position.z * MINUNITMULT;
+      DWIN_Draw_Signed_Float(font8x16, Select_Color, 3, UNITFDIGITS, 216, MBASE(3), HMI_ValueStruct.Move_Z_scaled);
+      EncoderRate.enabled = true;
+      break;
+    case TUNE_CASE_LASER_XYAREA:
+      if(laser_device.is_run_range) break;
+      if (checkkey == Laser_Tune)
+      {                                                              // 107011 -20210927 修复不在激光设置界面也显示的bug
+        if (HMI_IsChinese())                                         //107011 -20210924
+          DWIN_Frame_AreaCopy(1, 202, 265, 231, 280, 220, MBASE(4)); // 开始
+        else
+          DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Black, 220, MBASE(4), F("Start"));
+      }
+      HMI_Area_Move(true);
+
+        if(checkkey==Laser_Tune){// 107011 -20210927 修复不在激光设置界面也显示的bug
+          if (HMI_IsChinese()) //107011 -20210924
+            DWIN_Frame_AreaCopy(1, 235,265, 265,280, 220, MBASE(4));//完成
+          else
+            DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Black, 220, MBASE(4), F("Done "));
+        }
+        DWIN_UpdateLCD();
+        break;
+      default: break;
+    }
+  }
+  DWIN_UpdateLCD();
+}
+#endif //#if HAS_CUTTER
+/* Tune */
+void HMI_Tune()
+{
+  ENCODER_DiffState encoder_diffState = get_encoder_state();
+  if (encoder_diffState == ENCODER_DIFF_NO) return;
+  // Avoid flicker by updating only the previous menu
+  if (encoder_diffState == ENCODER_DIFF_CW)
+  {
+    if (select_tune.inc(1 + TUNE_CASE_TOTAL))
+    {
+      if (select_tune.now > MROWS && select_tune.now > index_tune)
+      {
+        index_tune = select_tune.now;
+        Scroll_Menu(DWIN_SCROLL_UP);
+      }
+      else
+      {
+        Move_Highlight(1, select_tune.now + MROWS - index_tune);
+      }
+    }
+  }
+  else if (encoder_diffState == ENCODER_DIFF_CCW)
+  {
+    if (select_tune.dec())
+    {
+      if (select_tune.now < index_tune - MROWS)
+      {
+        index_tune--;
+        Scroll_Menu(DWIN_SCROLL_DOWN);
+        if (index_tune == MROWS) Draw_Back_First();
+      }
+      else
+      {
         Move_Highlight(-1, select_tune.now + MROWS - index_tune);
       }
     }
@@ -4291,14 +6426,11 @@ void HMI_Tune() {
   }
   DWIN_UpdateLCD();
 }
-
 #if HAS_PREHEAT
-
   /* PLA Preheat */
   void HMI_PLAPreheatSetting() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
-
     // Avoid flicker by updating only the previous menu
     if (encoder_diffState == ENCODER_DIFF_CW) {
       if (select_PLA.inc(1 + PREHEAT_CASE_TOTAL)) Move_Highlight(1, select_PLA.now);
@@ -4349,12 +6481,10 @@ void HMI_Tune() {
     }
     DWIN_UpdateLCD();
   }
-
   /* ABS Preheat */
   void HMI_ABSPreheatSetting() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
-
     // Avoid flicker by updating only the previous menu
     if (encoder_diffState == ENCODER_DIFF_CW) {
       if (select_ABS.inc(1 + PREHEAT_CASE_TOTAL)) Move_Highlight(1, select_ABS.now);
@@ -4405,17 +6535,22 @@ void HMI_Tune() {
     }
     DWIN_UpdateLCD();
   }
-
 #endif
-
 /* Max Speed */
-void HMI_MaxSpeed() {
+void HMI_MaxSpeed()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
-    if (select_speed.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_speed.now);
+    #if HAS_CUTTER // 107011 -20210918
+    if(laser_device.is_laser_device()) {
+      if (select_speed.inc(1 + 3)) Move_Highlight(1, select_speed.now);
+    }else
+    #endif
+    {
+      if (select_speed.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_speed.now);
+    }
   }
   else if (encoder_diffState == ENCODER_DIFF_CCW) {
     if (select_speed.dec()) Move_Highlight(-1, select_speed.now);
@@ -4429,22 +6564,37 @@ void HMI_MaxSpeed() {
       EncoderRate.enabled = true;
     }
     else { // Back
-      checkkey = Motion;
-      select_motion.now = MOTION_CASE_RATE;
-      Draw_Motion_Menu();
+      #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()) {
+        checkkey = Motion;
+        select_motion.now = MOTION_LASER_CASE_RATE;
+        Draw_Laser_Motion_Menu();
+      }else
+      #endif
+      {
+        checkkey = Motion;
+        select_motion.now = MOTION_CASE_RATE;
+        Draw_Motion_Menu();
+      }
     }
   }
   DWIN_UpdateLCD();
 }
-
 /* Max Acceleration */
-void HMI_MaxAcceleration() {
+void HMI_MaxAcceleration()
+{
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
-    if (select_acc.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_acc.now);
+    #if HAS_CUTTER // 107011 -20210918
+      if(laser_device.is_laser_device()) {
+      if (select_acc.inc(1 + 3)) Move_Highlight(1, select_acc.now);
+    }else
+    #endif
+    {
+      if (select_acc.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_acc.now);
+    }
   }
   else if (encoder_diffState == ENCODER_DIFF_CCW) {
     if (select_acc.dec()) Move_Highlight(-1, select_acc.now);
@@ -4458,23 +6608,37 @@ void HMI_MaxAcceleration() {
       EncoderRate.enabled = true;
     }
     else { // Back
-      checkkey = Motion;
-      select_motion.now = MOTION_CASE_ACCEL;
-      Draw_Motion_Menu();
+        #if HAS_CUTTER
+        if(laser_device.is_laser_device()) {
+          checkkey = Motion;
+          select_motion.now = MOTION_LASER_CASE_ACCEL;
+          Draw_Laser_Motion_Menu();
+        }else
+        #endif
+        {
+          checkkey = Motion;
+          select_motion.now = MOTION_CASE_ACCEL;
+          Draw_Motion_Menu();
+      }
     }
   }
   DWIN_UpdateLCD();
 }
-
 #if HAS_CLASSIC_JERK
   /* Max Jerk */
   void HMI_MaxJerk() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
-
     // Avoid flicker by updating only the previous menu
     if (encoder_diffState == ENCODER_DIFF_CW) {
-      if (select_jerk.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_jerk.now);
+      #if HAS_CUTTER
+      if(laser_device.is_laser_device()) {
+        if (select_jerk.inc(1 + 3)) Move_Highlight(1, select_jerk.now);
+      }else
+      #endif
+      {
+        if (select_jerk.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_jerk.now);
+      }
     }
     else if (encoder_diffState == ENCODER_DIFF_CCW) {
       if (select_jerk.dec()) Move_Highlight(-1, select_jerk.now);
@@ -4493,19 +6657,24 @@ void HMI_MaxAcceleration() {
       else { // Back
         checkkey = Motion;
         select_motion.now = MOTION_CASE_JERK;
-        Draw_Motion_Menu();
+        #if HAS_CUTTER
+        if(laser_device.is_laser_device()) {
+          Draw_Laser_Motion_Menu();
+        }else
+        #endif
+        {
+          Draw_Motion_Menu();
+        }
       }
     }
     DWIN_UpdateLCD();
   }
 #endif // HAS_CLASSIC_JERK
-
 /* Step */
 void HMI_Step() 
 {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
-
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_step.inc(1 + 3 + ENABLED(HAS_HOTEND))) Move_Highlight(1, select_step.now);
@@ -4535,7 +6704,8 @@ void HMI_Step()
 void HMI_Init() {
   HMI_SDCardInit();
 
-  for (uint16_t t = 0; t <= 100; t += 2) {
+  for (uint16_t t = 0; t <= 100; t += 2)
+  {
     DWIN_ICON_Show(ICON, ICON_Bar, 15, 260);
     DWIN_Draw_Rectangle(1, Color_Bg_Black, 15 + t * 242 / 100, 260, 257, 280);
     DWIN_UpdateLCD();
@@ -4545,7 +6715,7 @@ void HMI_Init() {
   HMI_SetLanguage();
 }
 
-void DWIN_Update() 
+void DWIN_Update()
 {
   HMI_SDCardUpdate();       // SD card update
   if(!HMI_flag.disallow_recovery_flag) //在回零过程中不允许拔卡检测和断料检测
@@ -4558,15 +6728,30 @@ void DWIN_Update()
     {
       Check_Filament_Update();  /* check filament update */    
     }
-  }  
-  EachMomentUpdate();       // Status update  
+  }
+  #if HAS_CUTTER
+    if(laser_device.is_unknown_device()){ // 设备未知时不更新状态数据
+    }else
+  #endif
+  {
+    EachMomentUpdate();       // Status update
+  }
+  
   DWIN_HandleScreen();      // Rotary encoder update
 }
 
 void Check_Filament_Update(void)
 {
-  static uint32_t lMs = millis();
-  static uint8_t lNoMatCnt = 0;   
+    static uint32_t lMs = millis();
+    static uint8_t lNoMatCnt = 0;
+
+	#if HAS_CUTTER
+    if(laser_device.is_laser_device()) // 107011 -20210908 激光状态下不执行断料检测
+    {
+        return;
+    }
+	#endif
+
   if((card.isPrinting()|| (!HMI_flag.filement_resume_flag))&& (!temp_cutting_line_flag))
   // if(card.isPrinting() && (!temp_cutting_line_flag) || !HMI_flag.filement_resume_flag)//SD卡打印或者云打印
   {
@@ -4610,6 +6795,7 @@ void Check_Filament_Update(void)
     }
   }
 }
+
 //拔卡监测
  void Remove_card_window_check(void)
  {
@@ -4626,16 +6812,50 @@ void Check_Filament_Update(void)
           /* remove SD card when printing */
           if(IS_SD_PRINTING()&&(!temp_remove_card_flag)) //正在打印  
           {
-              checkkey = Popup_Window;
+              //checkkey = Popup_Window;
               HMI_flag.remove_card_flag=true;
               temp_remove_card_flag=true;
-              Popup_Window_Home();
+              //Popup_Window_Home();
+              
+              #if HAS_CUTTER
+                if(laser_device.is_laser_device())
+                { //激光下 弹出卡移除界面 107011 -20211029
+                  checkkey = Remove_card_window;
+                  Popup_window_Remove_card();
+                }else
+              #endif
+              { //FDM界面弹出回零界面
+                checkkey = Popup_Window;
+                Popup_Window_Home();
+              }
+
+
               #if ENABLED(POWER_LOSS_RECOVERY)
                 if (recovery.enabled) recovery.save(true, false);//rock_20211016
               #endif
 
+              // 记录激光打印拔卡前的打印状态为正在打印中 107011 -20211020
+              #if HAS_CUTTER
+                if(laser_device.is_laser_device()) laser_device.remove_card_before_is_printing = true; 
+              #endif
+
               queue.inject_P(PSTR("M25"));//M25: Pause the SD print in progress.              
+
           }
+          #if HAS_CUTTER
+            else if((laser_device.is_laser_device())&&IS_SD_PAUSED()&&(!temp_remove_card_flag))
+            {// 激光模式 -> 暂停打印中 -> 卡移除后的处理
+              //SERIAL_ECHO_MSG("remove card");
+              checkkey = Remove_card_window;
+              HMI_flag.remove_card_flag=true;
+              temp_remove_card_flag=true;
+              laser_device.remove_card_before_is_printing = false;
+              #if ENABLED(POWER_LOSS_RECOVERY)
+                if (recovery.enabled) recovery.save(true, false);//rock_20211016
+              #endif
+              Popup_window_Remove_card();
+            }
+          #endif//#if HAS_CUTTER
       }
       /* refresh sd card status */
       else
@@ -4648,18 +6868,43 @@ void Check_Filament_Update(void)
  
 void EachMomentUpdate() 
 {
-  static float card_Index=0; 
+  //static float card_Index=0; 
   static millis_t next_var_update_ms = 0, next_rts_update_ms = 0;
   const millis_t ms = millis();
   char *fileName = TERN(POWER_LOSS_RECOVERY, recovery.info.sd_filename, "");
   PrintFile_InfoTypeDef fileInfo = {0};
   if (ELAPSED(ms, next_var_update_ms)) {
     next_var_update_ms = ms + DWIN_VAR_UPDATE_INTERVAL;
-    update_variable();
+
+    //107011 -20210915 更新状态数据
+    #if HAS_CUTTER
+    static uint8_t check_count = 0xff;
+    if(laser_device.is_laser_device()) {
+		  if((checkkey==Laser_Print_Warning) || (checkkey==Laser_Fdm_Sw_Warning)){ //107011 -20210918 打印警告、激光头切换，这两个界面中暂停数据更新
+		  }else update_laser_variable();
+
+      if(check_count==0xff){//首次时 设置当前位置为关机前的Z轴坐标
+        check_count = 0;
+        char cmd[13];
+        sprintf_P(cmd, PSTR("G92.9 Z%.3f"), laser_device.laser_z_axis_high);
+        queue.inject_P(cmd); 
+      }else if(++check_count >= 3){
+        check_count = 0;
+        if(current_position.z != laser_device.laser_z_axis_high)
+        {
+          //SERIAL_ECHOLNPAIR("current_position.z:",current_position.z);
+          laser_device.save_z_axis_high_to_eeprom(current_position.z);
+        }
+      }
+	  }else 
+    #endif //#if HAS_CUTTER
+    {
+      update_variable();
+    }
   }
   if (PENDING(ms, next_rts_update_ms)) return;
   next_rts_update_ms = ms + DWIN_SCROLL_UPDATE_INTERVAL;
-  if (checkkey == PrintProcess) 
+  if (checkkey == PrintProcess)
   {
     // if print done
     if(HMI_flag.print_finish && !HMI_flag.done_confirm_flag) 
@@ -4674,13 +6919,19 @@ void EachMomentUpdate()
       // show percent bar and value
       _card_percent = 100;
       Draw_Print_ProgressBar();
-      
-      _remain_time=0;//修复打印完成界面，剩余时间不清零的bug  20211220
+
+      //修复打印完成界面，剩余时间不清零 107011 -20211110 
+      _remain_time = 0;
+      #if HAS_CUTTER
+        laser_device.remain_time=0;
+      #endif
+      Draw_Print_ProgressRemain();
+
       // show print done confirm
       DWIN_Draw_Rectangle(1, Color_Bg_Black, 0, 250, DWIN_WIDTH - 1, STATUS_Y);
       DWIN_ICON_Show(ICON, HMI_IsChinese() ? ICON_Confirm_C : ICON_Confirm_E, 86, 283);
     }
-    else if (HMI_flag.pause_flag != printingIsPaused()) 
+    else if (HMI_flag.pause_flag != printingIsPaused())
     {
       // print status update
       HMI_flag.pause_flag = printingIsPaused();
@@ -4692,19 +6943,34 @@ void EachMomentUpdate()
     }
   }
 
-  // pause after homing
-  if (HMI_flag.pause_action && printingIsPaused() && !planner.has_blocks_queued()) 
+  //激光模式下的打印暂停
+  #if HAS_CUTTER
+    if (laser_device.is_laser_device() && HMI_flag.pause_action && printingIsPaused() && !planner.has_blocks_queued())
+    {
+      HMI_flag.pause_action = false;
+      cutter.apply_power(0); //暂停关闭激光
+      //if(laser_device.remove_card_before_is_printing) // 
+      //SERIAL_ECHO_MSG("G1 X0 Y0");
+      //queue.inject_P(PSTR("G1 X0 Y0")); // 雕刻暂停时 激光停在当前位置
+    }
+    else
+  #endif //#if HAS_CUTTER
+    // pause after homing
+    if (HMI_flag.pause_action && printingIsPaused() && !planner.has_blocks_queued()) //107011 -20211009
+  //if (HMI_flag.pause_action && printingIsPaused() && !planner.has_blocks_queued())
   {
-      if(!HMI_flag.cutting_line_flag)
-      {
-        HMI_flag.pause_action = false;
-        #if ENABLED(PAUSE_HEAT)
-        TERN_(HAS_HOTEND, resume_hotend_temp = thermalManager.degTargetHotend(0));
-        TERN_(HAS_HEATED_BED, resume_bed_temp = thermalManager.degTargetBed());
+
+    if(!HMI_flag.cutting_line_flag)
+    {
+      HMI_flag.pause_action = false;
+      #if ENABLED(PAUSE_HEAT)
+      TERN_(HAS_HOTEND, resume_hotend_temp = thermalManager.degTargetHotend(0));
+      TERN_(HAS_HEATED_BED, resume_bed_temp = thermalManager.degTargetBed());
       //thermalManager.disable_all_heaters();  //rock_20210724 测试部要求暂停仍然在加热
       #endif
       queue.inject_P(PSTR("G1 F1200 X0 Y0"));
-      }
+    }
+
   }
 // SERIAL_ECHOLNPAIR(" \n\n HMI_flag.cutting_line_flag ", HMI_flag.cutting_line_flag);
 // SERIAL_ECHOLNPAIR(" \n\n printingIsPaused() ", printingIsPaused());
@@ -4738,23 +7004,32 @@ void EachMomentUpdate()
     HMI_flag.online_pause_flag=false;
     queue.inject_P(PSTR("G1 F1200 X0 Y0"));
   }
-  
+
  // cutting after homing
   if (HMI_flag.remove_card_flag && printingIsPaused() && !planner.has_blocks_queued()) 
   {
-    //HMI_flag.remove_card_flag = false;
-    #if ENABLED(PAUSE_HEAT)
-      TERN_(HAS_HOTEND, resume_hotend_temp = thermalManager.degTargetHotend(0));
-      TERN_(HAS_HEATED_BED, resume_bed_temp = thermalManager.degTargetBed());
+//HMI_flag.remove_card_flag = false;
+#if ENABLED(PAUSE_HEAT)
+    TERN_(HAS_HOTEND, resume_hotend_temp = thermalManager.degTargetHotend(0));
+    TERN_(HAS_HEATED_BED, resume_bed_temp = thermalManager.degTargetBed());
 
-      //thermalManager.disable_all_heaters();  //rock_20210724 测试部要求暂停仍然在加热
+    //thermalManager.disable_all_heaters();  //rock_20210724 测试部要求暂停仍然在加热
+#endif
+
+    //拔卡后再插入卡继续打印激光速度改变的bug 107011 -20211020
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device()) {
+        //if(laser_device.remove_card_before_is_printing) queue.inject_P(PSTR("G1 X0 Y0"));  //  不做操作 107011 -20211028
+      }else
     #endif
-    queue.inject_P(PSTR("G1 F1200 X0 Y0"));
+    {
+      queue.inject_P(PSTR("G1 F1200 X0 Y0"));
+    }
     /* check filament resume */
-    if(checkkey == Popup_Window)
-    {  
-        checkkey = Remove_card_window;
-        Popup_window_Remove_card();     
+    if (checkkey == Popup_Window)
+    {
+      checkkey = Remove_card_window;
+      Popup_window_Remove_card();
     }
   }
  //云打印状态更新
@@ -4777,7 +7052,6 @@ void EachMomentUpdate()
     //更新打印时间
     if (last_Printtime != min)
     { // 1 minute update      
-      SERIAL_ECHOLNPAIR(" elapsed.value=: ", elapsed.value);
       last_Printtime = min;     
       Draw_Print_ProgressElapsed(); 
       //  _remain_time -= 60;  //剩余时间减去1分钟
@@ -4796,52 +7070,72 @@ void EachMomentUpdate()
     const uint8_t card_pct = card.percentDone();
     //_card_percent=card.percentDone();  //rock_20210901
     static uint8_t last_cardpercentValue = 101;
-    if (last_cardpercentValue != card_pct) 
+    if (last_cardpercentValue != card_pct)
     { // print percent
       last_cardpercentValue = card_pct;
-      if (card_pct) 
+      if (card_pct)
       {
         _card_percent = card_pct;
         Draw_Print_ProgressBar();
       }
     }
     duration_t elapsed = print_job_timer.duration(); // print timer
-
     // Print time so far
     static uint16_t last_Printtime = 0;
     const uint16_t min = (elapsed.value % 3600) / 60;
-    if (last_Printtime != min) 
+    if (last_Printtime != min)
     { // 1 minute update
       last_Printtime = min;
       Draw_Print_ProgressElapsed();
     }
-
     // Estimate remaining time every 20 seconds
     static millis_t next_remain_time_update = 0;
-    if (_card_percent > 1 && ELAPSED(ms, next_remain_time_update) && !HMI_flag.heat_flag)   //rock_20210922
+    #if HAS_CUTTER
+      //if (_card_percent > 1 && ELAPSED(ms, next_remain_time_update) && laser_device.is_laser_device()) // 107011 -20210926
+      if (ELAPSED(ms, next_remain_time_update) && laser_device.is_laser_device()) // 107011 -20210926
+      {    
+        //                                                                                             //处理激光的打印时间更新
+        // 107011 -20211116 激光采用直接从Gcode中读取剩余时间的方式
+        // if(card.getIndex()>0){// card.getIndex()打印结束有可能为0， 导致打印完成显示剩余时间 “>100H” 107011 -20211110
+        //   _remain_time = ((elapsed.value) * ((float)card.getFileSize() / (float)card.getIndex())) - (elapsed.value);
+        // }else{
+        //   _remain_time=0;
+        // } 
+        if(laser_device.remain_time >= last_Printtime*60)
+          _remain_time = laser_device.remain_time-last_Printtime*60; 
+        else _remain_time = 0;
+
+        next_remain_time_update += DWIN_REMAIN_TIME_UPDATE_INTERVAL;
+        Draw_Print_ProgressRemain();
+      }
+      else
+    #endif //#if HAS_CUTTER
+    if (_card_percent > 1 && ELAPSED(ms, next_remain_time_update) && !HMI_flag.heat_flag)
     {
       // _remain_time = (elapsed.value - dwin_heat_time) / (_card_percent * 0.01f) - (elapsed.value - dwin_heat_time);
-      card_Index=card.getIndex();
-      if(card_Index>0) //card_Index = 1;  //rock_20211115 解决偶尔剩余时间显示异常显示>100H 问题
-        _remain_time = ((elapsed.value - dwin_heat_time) * ((float)card.getFileSize() / card_Index)) - (elapsed.value - dwin_heat_time);
-      else 
-      _remain_time =0;
+      //_remain_time = ((elapsed.value - dwin_heat_time) * ((float)card.getFileSize() / (float)card.getIndex())) - (elapsed.value - dwin_heat_time);
+      if(card.getIndex()>0){// card.getIndex()打印结束有可能为0， 导致打印完成显示剩余时间 “>100H” 107011- 20211110
+        _remain_time = ((elapsed.value - dwin_heat_time) * ((float)card.getFileSize() / (float)card.getIndex())) - (elapsed.value - dwin_heat_time);
+      }else{ 
+        _remain_time=0;
+      }
+
       next_remain_time_update += DWIN_REMAIN_TIME_UPDATE_INTERVAL;
       Draw_Print_ProgressRemain();
     }
-    else if(_card_percent<=1 && ELAPSED(ms, next_remain_time_update))   
+    else if (_card_percent <= 1 && ELAPSED(ms, next_remain_time_update))
     {
-      _remain_time=0; //rock_20210831  解决剩余时间不清零的问题。
+      _remain_time = 0; //rock_20210831  解决剩余时间不清零的问题。
       Draw_Print_ProgressRemain();
-    }   
+    }
   }
-  else if (dwin_abort_flag && !HMI_flag.home_flag) 
+  else if (dwin_abort_flag && !HMI_flag.home_flag)
   { // Print Stop
     dwin_abort_flag = false;
     HMI_ValueStruct.print_speed = feedrate_percentage = 100;
     dwin_zoffset = BABY_Z_VAR;
     select_page.set(0);
-    Goto_MainMenu();  //rock_20210831 
+    Goto_MainMenu(); //rock_20210831
   }
   #if ENABLED(POWER_LOSS_RECOVERY)
     else if (DWIN_lcd_sd_status && recovery.dwin_flag) 
@@ -4872,7 +7166,6 @@ void EachMomentUpdate()
       const int8_t npos = _MAX(0U, DWIN_WIDTH - strlen(fileInfo.longfilename) * (MENU_CHR_W)) / 2;
       DWIN_Draw_String(false, true, font8x16, Popup_Text_Color, Color_Bg_Window, npos, 252, fileInfo.longfilename);
       DWIN_UpdateLCD();
-
       while (recovery_flag) 
       {
         ENCODER_DiffState encoder_diffState = Encoder_ReceiveAnalyze();
@@ -4898,14 +7191,13 @@ void EachMomentUpdate()
       HMI_ValueStruct.show_mode = 0;
       queue.inject_P(PSTR("M1000"));
       Goto_PrintProcess();
-      Draw_Status_Area(true);
+        Draw_Status_Area(true);
       DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Black, npos, 60, fileInfo.longfilename);
     }
   #endif
   DWIN_UpdateLCD();
-  HAL_watchdog_refresh();	
+  HAL_watchdog_refresh();
 }
-
 void DWIN_HandleScreen() {
   switch (checkkey) {
     case MainMenu:        HMI_MainMenu(); break;
@@ -4936,6 +7228,20 @@ void DWIN_HandleScreen() {
     #endif
     case Info:            HMI_Info(); break;
     case Tune:            HMI_Tune(); break;
+    #if HAS_CUTTER
+      case Laser_Prepare:   HMI_Laser_Prepare(); break;// 107011-20210910 激光模式的准备界面
+      case LaserAxisMove:   HMI_Laser_AxisMove(); break;// 107011 -20210911 激光模打印界面设置中的式轴移动
+      case Laser_Control:   HMI_Laser_Control(); break;//107011 -20210910 激光模式的控制界面
+      case Select_Device:   HMI_LaserOrFDM(); break; // 107011 -20210911选择设备 FDM/Laser
+      case Laser_Tune:      HMI_Laser_Tune(); break; //107011 -20210911激光模式打印界面的设置
+      case Tune_Move_X:     HMI_Tune_Move_X();break; //107011 -20210911 打印界面->设置->X轴移动
+      case Tune_Move_Y:     HMI_Tune_Move_Y();break; //107011 -20210911 打印界面->设置->Y轴移动
+      case Tune_Move_Z:     HMI_Tune_Move_Z();break; //107011 -20210911 打印界面->设置->Z轴移动
+      case Laser_Print_Warning:  HMI_Laser_Print_Warning(); break; //107011 -20210915 打印界面->打印->提示警告界面
+      case Laser_Fdm_Sw_Warning: HMI_Laser_Fdm_Sw_Warning(); break;// 控制->激光或者FDM切换-> 警告界面
+      case Laser_Focus:     HMI_Laser_Focus(); break; // 控制->切换激光打印->确定->聚焦调整
+      case Laser_Focus_Move_Z: HMI_Focus_Move_Z();break;
+    #endif //#if HAS_CUTTER
     #if HAS_PREHEAT
       case PLAPreheat:    HMI_PLAPreheatSetting(); break;
       case ABSPreheat:    HMI_ABSPreheatSetting(); break;
@@ -4972,38 +7278,51 @@ void DWIN_HandleScreen() {
     default: break;
   }
 }
-
 void DWIN_CompletedHoming() {
   HMI_flag.home_flag = false;
   dwin_zoffset = TERN0(HAS_BED_PROBE, probe.offset.z);
   if (checkkey == Last_Prepare) {
-    checkkey = Prepare;
+    //107011 -20210910 激光模式
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device()) checkkey = Laser_Prepare;
+    else
+#endif //#if HAS_CUTTER
+    {
+      checkkey = Prepare;
+    }
     select_prepare.now = PREPARE_CASE_HOME;
     index_prepare = MROWS;
-    Draw_Prepare_Menu();
+    //107011 -20210910 激光模式
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device()) Draw_Laser_Prepare_Menu();
+    else 
+    #endif // #if HAS_CUTTER
+    {
+      Draw_Prepare_Menu();
+    }
   }
   else if (checkkey == Back_Main) {
     HMI_ValueStruct.print_speed = feedrate_percentage = 100;
     planner.finish_and_disable();
     Goto_MainMenu();
   }
+  else if (checkkey == Back_Main_Homing) {
+    Goto_MainMenu();
+  }
 }
-
 void DWIN_CompletedLeveling() {
   if (checkkey == Leveling) Goto_MainMenu();
 }
-
 // void DWIN_StatusChanged(const char *text) {
 //   DWIN_Draw_Rectangle(1, Color_Bg_Blue, 0, STATUS_Y, DWIN_WIDTH, STATUS_Y + 20);
 //   const int8_t x = _MAX(0U, DWIN_WIDTH - strlen_P(text) * MENU_CHR_W) / 2;
 //   DWIN_Draw_String(false, false, font8x16, Color_White, Color_Bg_Blue, x, STATUS_Y + 2, F(text));
 //   DWIN_UpdateLCD();
 // }
-
 // GUI extension
-void DWIN_Draw_Checkbox(uint16_t color, uint16_t bcolor, uint16_t x, uint16_t y, bool mode=false) {
-  DWIN_Draw_String(false,true,font8x16,Select_Color,bcolor,x+4,y,F(mode ? "x" : " "));
-  DWIN_Draw_Rectangle(0,color,x+2,y+2,x+17,y+17);
+void DWIN_Draw_Checkbox(uint16_t color, uint16_t bcolor, uint16_t x, uint16_t y, bool mode = false)
+{
+  DWIN_Draw_String(false, true, font8x16, Select_Color, bcolor, x + 4, y, F(mode ? "x" : " "));
+  DWIN_Draw_Rectangle(0, color, x + 2, y + 2, x + 17, y + 17);
 }
-
 #endif // DWIN_CREALITY_LCD

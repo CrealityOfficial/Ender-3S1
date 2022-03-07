@@ -1809,6 +1809,13 @@
   #define Tem_compens_value_50   60//50
 #endif
 
+//#if HAS_CUTTER
+  #define  LASER_FDM_ADDR             1950
+  #define  LASER_Z_AXIS_HIGH_ADDR    1952 // 占用两字节
+//#endif
+
+
+
 //
 // Host Keepalive
 //

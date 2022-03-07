@@ -1584,7 +1584,10 @@ void prepare_line_to_destination() {
     //
     #if HOMING_Z_WITH_PROBE
       if (axis == Z_AXIS) {
-        if (TERN0(BLTOUCH, bltouch.deploy())) return;   // BLTouch was deployed above, but get the alarm state.
+        if (TERN0(BLTOUCH, bltouch.deploy())) { 
+          probe.stow();// 修复FDM 调平失败后，Z轴不能往下调的bug 107011 -20211014
+          return; 
+          }   // BLTouch was deployed above, but get the alarm state.
         if (TERN0(PROBE_TARE, probe.tare())) return;
       }
     #endif

@@ -60,6 +60,10 @@
   #define PE_LEDS_COMPLETED_TIME (30*60)
 #endif
 
+#if HAS_CUTTER
+  #include "../../feature/spindle_laser.h"
+#endif
+
 /**
  * M1001: Execute actions for SD print completion
  */
@@ -101,11 +105,21 @@ void GcodeSuite::M1001() {
     }
   #endif
 
-  // Inject SD_FINISHED_RELEASECOMMAND, if any
-  #ifdef SD_FINISHED_RELEASECOMMAND
-    gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND));
+  //修改激光打印结束为回原点 107011 -20211108
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device())
+    {
+      #ifdef SD_FINISHED_RELEASECOMMAND_LASER
+        gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND_LASER));
+      #endif
+    }else
   #endif
-
+  {
+    // Inject SD_FINISHED_RELEASECOMMAND, if any
+    #ifdef SD_FINISHED_RELEASECOMMAND
+      gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND));
+    #endif
+  }
   TERN_(EXTENSIBLE_UI, ExtUI::onPrintFinished());
 
   // Re-select the last printed file in the UI

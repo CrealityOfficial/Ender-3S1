@@ -26,9 +26,9 @@
 
 #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #include "../inc/MarlinConfigPre.h"
-#include "../../module/stepper.h"
+#include "../module/stepper.h"
 
-#include "../../lcd/dwin/e3v2/dwin.h"
+#include "../lcd/dwin/e3v2/dwin.h"
 
 #if ENABLED(POWER_LOSS_RECOVERY)
 
@@ -66,6 +66,10 @@ uint32_t PrintJobRecovery::cmd_sdpos, // = 0
 
 #define DEBUG_OUT ENABLED(DEBUG_POWER_LOSS_RECOVERY)
 #include "../core/debug_out.h"
+
+#if HAS_CUTTER
+#include "../feature/spindle_laser.h"
+#endif
 
 PrintJobRecovery recovery;
 
@@ -119,10 +123,17 @@ void PrintJobRecovery::changed() {
         if (!card.isMounted()) card.mount();
         if (card.isMounted()) {
           #ifdef EEPROM_PLR
-          BL24CXX::read(PLR_ADDR, (uint8_t*)&info, sizeof(info));
+            BL24CXX::read(PLR_ADDR, (uint8_t*)&info, sizeof(info));
           #else
             load();
           #endif 
+              // 激光暂不做断电续打 107011 -20211015
+          #if HAS_CUTTER 
+            if(laser_device.is_laser_device()) {// 激光模式下不做断电续打
+            return purge();
+            }else
+          #endif
+          {
             if (!valid()) 
             {
               SERIAL_ECHO_MSG("Enter the cancel screen··········\r\n");
@@ -140,6 +151,13 @@ void PrintJobRecovery::changed() {
     if (card.isMounted()) 
     {
       load();
+      // 激光暂不做断电续打 107011 -20211015
+			#if HAS_CUTTER 
+				if(laser_device.is_laser_device()) {// 激光模式下不做断电续打
+				return purge();
+			}else
+			#endif
+
       if (!valid()) return cancel();
       HMI_flag.power_back_to_zero_flag=true; //rock_21211025  断电续打功能就不用回零操作啦
       queue.inject_P(PSTR("M1000S"));
@@ -180,6 +198,9 @@ void PrintJobRecovery::prepare() {
 void PrintJobRecovery::save(const bool force/*=false*/, const float zraise/*=POWER_LOSS_ZRAISE*/, const bool raised/*=false*/) {
 
   // We don't check IS_SD_PRINTING here so a save may occur during a pause
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) return;
+  #endif
 
   #if SAVE_INFO_INTERVAL_MS > 0
     static millis_t next_save_ms; // = 0

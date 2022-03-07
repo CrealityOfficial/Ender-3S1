@@ -1,6 +1,6 @@
 #include "i2c_eeprom.h"
 #include <stdlib.h>
-#include "../../pins/stm32f1/pins_CREALITY_S1.h"
+// #include "../../pins/stm32f1/pins_CREALITY_S1.h"
 
 // #include "../../inc/MarlinConfigPre.h"
 // #include "../../Marlin.h"

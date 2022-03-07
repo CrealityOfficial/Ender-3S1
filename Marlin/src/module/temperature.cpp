@@ -60,6 +60,10 @@
 #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
+#if ENABLED(HAS_CUTTER)
+#include "../feature/spindle_laser.h"
+#endif
+
 // LIB_MAX31855 can be added to the build_flags in platformio.ini to use a user-defined library
 #if LIB_USR_MAX31855
   #include <Adafruit_MAX31855.h>
@@ -778,8 +782,8 @@ int16_t Temperature::getHeaterPower(const heater_id_t heater_id) {
       case H_COOLER: return temp_cooler.soft_pwm_amount;
     #endif
     #if HAS_FAN
-      case H_FAN0:   return thermalManager.fan_speed[0];
-      case H_FAN1:   return thermalManager.fan_speed[1];
+       case H_FAN0:   return thermalManager.fan_speed[0];
+       case H_FAN1:   return thermalManager.fan_speed[0];//fan_on ? CHAMBER_AUTO_FAN_SPEED : 0
     #endif  
     default:
       return TERN0(HAS_HOTEND, temp_hotend[heater_id].soft_pwm_amount);
@@ -793,6 +797,12 @@ int16_t Temperature::getHeaterPower(const heater_id_t heater_id) {
   #define CHAMBER_FAN_INDEX HOTENDS
 
   void Temperature::checkExtruderAutoFans() {
+
+    // 激光会被喉管风扇打断 107011 -20211014
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device()) return;
+    #endif
+
     #define _EFAN(B,A) _EFANOVERLAP(A,B) ? B :
     static const uint8_t fanBit[] PROGMEM = {
       0
@@ -1553,9 +1563,10 @@ void Temperature::manage_heater() {
   #if ENABLED(LASER_COOLANT_FLOW_METER)
     cooler.flowmeter_task(ms);
     #if ENABLED(FLOWMETER_SAFETY)
-      if (cutter.enabled() && cooler.check_flow_too_low()) {
+      if (cooler.check_flow_too_low()) {
+        if (cutter.enabled()) TERN_(HAS_DISPLAY, ui.flow_fault());
         cutter.disable();
-        ui.flow_fault();
+        cutter.cutter_mode = CUTTER_MODE_ERROR;   // Immediately kill stepper inline power output
       }
     #endif
   #endif
@@ -2232,7 +2243,13 @@ void Temperature::init() {
   ENABLE_TEMPERATURE_INTERRUPT();
 
   #if HAS_AUTO_FAN_0
-    INIT_E_AUTO_FAN_PIN(E0_AUTO_FAN_PIN);
+    // #if HAS_CUTTER
+    //   if(laser_device.is_laser_device()){ //107011 -20210928
+    //  }else 
+    // #endif
+    {
+      INIT_E_AUTO_FAN_PIN(E0_AUTO_FAN_PIN);
+    }
   #endif
   #if HAS_AUTO_FAN_1 && !_EFANOVERLAP(1,0)
     INIT_E_AUTO_FAN_PIN(E1_AUTO_FAN_PIN);

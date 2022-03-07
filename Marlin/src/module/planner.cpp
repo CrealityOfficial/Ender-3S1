@@ -115,6 +115,11 @@
 // fewer movements. The delay is measured in milliseconds, and must be less than 250ms
 #define BLOCK_DELAY_FOR_1ST_MOVE 100
 
+// 107011 -20211020
+#if HAS_CUTTER
+  #define LASER_BLOCK_DELAY_FOR_1ST_MOVE  0
+#endif
+
 Planner planner;
 
 // public:
@@ -132,7 +137,7 @@ uint8_t Planner::delay_before_delivering;       // This counter delays delivery 
 
 planner_settings_t Planner::settings;           // Initialized by settings.load()
 
-#if ENABLED(LASER_POWER_INLINE)
+#if ENABLED(LASER_FEATURE)
   laser_state_t Planner::laser_inline;          // Current state for blocks
 #endif
 
@@ -848,33 +853,35 @@ void Planner::calculate_trapezoid_for_block(block_t * const block, const_float_t
    * Note this may behave unreliably when running with S_CURVE_ACCELERATION
    */
   #if ENABLED(LASER_POWER_INLINE_TRAPEZOID)
-    if (block->laser.power > 0) { // No need to care if power == 0
-      const uint8_t entry_power = block->laser.power * entry_factor; // Power on block entry
-      #if DISABLED(LASER_POWER_INLINE_TRAPEZOID_CONT)
-        // Speedup power
-        const uint8_t entry_power_diff = block->laser.power - entry_power;
-        if (entry_power_diff) {
-          block->laser.entry_per = accelerate_steps / entry_power_diff;
+    if (cutter.cutter_mode == CUTTER_MODE_CONTINUOUS) {
+      if (block->laser.power > 0) { // No need to care if power == 0
+        const uint8_t entry_power = block->laser.power * entry_factor; // Power on block entry
+        #if ENABLED(LASER_POWER_INLINE_TRAPEZOID_CONT)
           block->laser.power_entry = entry_power;
-        }
-        else {
-          block->laser.entry_per = 0;
-          block->laser.power_entry = block->laser.power;
-        }
-        // Slowdown power
-        const uint8_t exit_power = block->laser.power * exit_factor, // Power on block entry
-                      exit_power_diff = block->laser.power - exit_power;
-        if (exit_power_diff) {
-          block->laser.exit_per = (block->step_event_count - block->decelerate_after) / exit_power_diff;
-          block->laser.power_exit = exit_power;
-        }
-        else {
-          block->laser.exit_per = 0;
-          block->laser.power_exit = block->laser.power;
-        }
-      #else
-        block->laser.power_entry = entry_power;
-      #endif
+        #else
+          // Speedup power
+          const uint8_t entry_power_diff = block->laser.power - entry_power;
+          if (entry_power_diff) {
+            block->laser.entry_per = accelerate_steps / entry_power_diff;
+            block->laser.power_entry = entry_power;
+          }
+          else {
+            block->laser.entry_per = 0;
+            block->laser.power_entry = block->laser.power;
+          }
+          // Slowdown power
+          const uint8_t exit_power = block->laser.power * exit_factor, // Power on block entry
+                        exit_power_diff = block->laser.power - exit_power;
+          if (exit_power_diff) {
+            block->laser.exit_per = (block->step_event_count - block->decelerate_after) / exit_power_diff;
+            block->laser.power_exit = exit_power;
+          }
+          else {
+            block->laser.exit_per = 0;
+            block->laser.power_exit = block->laser.power;
+          }
+        #endif // !LASER_POWER_INLINE_TRAPEZOID_CONT
+      }
     }
   #endif
 }
@@ -1306,7 +1313,7 @@ void Planner::recalculate() {
 #endif // HAS_FAN
 
 /**
- * Maintain fans, paste extruder pressure,
+ * Maintain fans, paste extruder pressure, spindle/laser power
  */
 void Planner::check_axes_activity() {
 
@@ -1793,7 +1800,13 @@ bool Planner::_buffer_steps(const xyze_long_t &target
     // As there are no queued movements, the Stepper ISR will not touch this
     // variable, so there is no risk setting this here (but it MUST be done
     // before the following line!!)
-    delay_before_delivering = BLOCK_DELAY_FOR_1ST_MOVE;
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device()) delay_before_delivering = LASER_BLOCK_DELAY_FOR_1ST_MOVE; // 修复激光 抖动灰模式打印不出的bug
+    else
+    #endif
+    {
+      delay_before_delivering = BLOCK_DELAY_FOR_1ST_MOVE;
+    }
   }
 
   // Move buffer head
@@ -1927,10 +1940,20 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
   block->direction_bits = dm;
 
   // Update block laser power
-  #if ENABLED(LASER_POWER_INLINE)
-    laser_inline.status.isPlanned = true;
-    block->laser.status = laser_inline.status;
-    block->laser.power = laser_inline.power;
+  #if HAS_CUTTER
+    if (cutter.cutter_mode == CUTTER_MODE_STANDARD)
+      block->cutter_power = cutter.power;
+  #endif
+
+  #if ENABLED(LASER_FEATURE)
+    if (cutter.cutter_mode != CUTTER_MODE_STANDARD) {
+      block->laser.power = laser_inline.power;
+      block->laser.status = laser_inline.status;
+      if (cutter.cutter_mode == CUTTER_MODE_DYNAMIC && cutter.laser_feedrate_changed()) { // Only process changes in rate
+        laser_inline.power = cutter.calc_dynamic_power();
+        block->laser.power = laser_inline.power;
+      }
+    }
   #endif
 
   // Number of steps for each axis
@@ -2049,7 +2072,6 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
 
   TERN_(MIXING_EXTRUDER, mixer.populate_block(block->b_color))
 
-  TERN_(HAS_CUTTER, block->cutter_power = cutter.power);
 
   #if HAS_FAN
     FANS_LOOP(i) block->fan_speed[i] = thermalManager.fan_speed[i];
@@ -2700,15 +2722,21 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
 
 } // _populate_block()
 
+
+void Planner::buffer_sync_block() {
+    constexpr uint8_t sync_flag = BLOCK_FLAG_SYNC_POSITION;
+  buffer_sync_block(sync_flag);
+}
+
 /**
  * Planner::buffer_sync_block
- * Add a block to the buffer that just updates the position,
- * or in case of LASER_SYNCHRONOUS_M106_M107 the fan PWM
+ * Add a block to the buffer that just updates the position
+ * @param sync_flag BLOCK_FLAG_SYNC_FANS & BLOCK_FLAG_LASER_PWR 
+ * Support LASER_SYNCHRONOUS_M106_M107 and LASER_POWER_SYNC
+ * power sync block buffer queueing.   
  */
-void Planner::buffer_sync_block(TERN_(LASER_SYNCHRONOUS_M106_M107, uint8_t sync_flag)) {
-  #if DISABLED(LASER_SYNCHRONOUS_M106_M107)
-    constexpr uint8_t sync_flag = BLOCK_FLAG_SYNC_POSITION;
-  #endif
+void Planner::buffer_sync_block(uint8_t sync_flag) {
+
 
   // Wait for the next available block
   uint8_t next_buffer_head;
@@ -2725,6 +2753,11 @@ void Planner::buffer_sync_block(TERN_(LASER_SYNCHRONOUS_M106_M107, uint8_t sync_
     FANS_LOOP(i) block->fan_speed[i] = thermalManager.fan_speed[i];
   #endif
 
+  #if ENABLED(LASER_POWER_SYNC)
+    laser_inline.power = cutter.power;
+    block->laser.power = laser_inline.power;
+  #endif
+
   // If this is the first added movement, reload the delay, otherwise, cancel it.
   if (block_buffer_head == block_buffer_tail) {
     // If it was the first queued block, restart the 1st block delivery delay, to
@@ -2732,7 +2765,13 @@ void Planner::buffer_sync_block(TERN_(LASER_SYNCHRONOUS_M106_M107, uint8_t sync_
     // As there are no queued movements, the Stepper ISR will not touch this
     // variable, so there is no risk setting this here (but it MUST be done
     // before the following line!!)
-    delay_before_delivering = BLOCK_DELAY_FOR_1ST_MOVE;
+    #if HAS_CUTTER
+    if(laser_device.is_laser_device()) delay_before_delivering = LASER_BLOCK_DELAY_FOR_1ST_MOVE; // 修复激光 抖动灰模式打印不出的bug
+    else
+    #endif
+    {
+      delay_before_delivering = BLOCK_DELAY_FOR_1ST_MOVE;
+    }
   }
 
   block_buffer_head = next_buffer_head;
@@ -3070,11 +3109,13 @@ void Planner::set_max_acceleration(const uint8_t axis, float inMaxAccelMMS2) {
       const xyze_float_t max_acc_edit_scaled = max_accel_edit * 2;
     #endif
     limit_and_warn(inMaxAccelMMS2, axis, PSTR("Acceleration"), max_acc_edit_scaled);
+
   #endif
   settings.max_acceleration_mm_per_s2[axis] = inMaxAccelMMS2;
 
   // Update steps per s2 to agree with the units per s2 (since they are used in the planner)
   reset_acceleration_rates();
+
 }
 
 /**
