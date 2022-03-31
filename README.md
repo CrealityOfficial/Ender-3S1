@@ -33,39 +33,39 @@ When using the laser module on Ender-3 S1 for the first time, please check if th
 Please connect the machine to power supply, turn on the power switch on the side, select "Control" - "Info", to check if the firmware version is V1.0.4 or above.
 
 ## How to install CrealityPrint software
-1、Please download “Creality Print” to install in [Creality official website](https://www.creality.com/download)
+1. Please download “Creality Print” to install in [Creality official website](https://www.creality.com/download)
 
-2、Double click to open the software installation package, click "Next-"Accept".
+2. Double click to open the software installation package, click "Next-"Accept".
 
-3、Confirm the installation location of the software, click "Browse"-"Next"- "Install"-"Finish".
+3. Confirm the installation location of the software, click "Browse"-"Next"- "Install"-"Finish".
 
 ## How to use CrealityPrint software
-1、Add Ender 3S1 into software.
+1. Add Ender 3S1 into software.
 
-2、Make sure the current status is “Laser”.
+2. Make sure the current status is “Laser”.
 
-3、Click on the "Picture" button on the left and find the image file you need to engrave. Open to import the picture into the CrealityPrint software.
+3. Click on the "Picture" button on the left and find the image file you need to engrave. Open to import the picture into the CrealityPrint software.
 
-4、Adjust the position, size, rotation angle and other parameters of the file in the right-hand console, setting the processing mode and working parameters, finally preview the processing effect of it.
+4. Adjust the position, size, rotation angle and other parameters of the file in the right-hand console, setting the processing mode and working parameters, finally preview the processing effect of it.
 
-5、Finally, click on "Generate G-Code" to save the engraving file on the SD card.
+5. Finally, click on "Generate G-Code" to save the engraving file on the SD card.
 
 ## How to engrave
-1、Insert SD card into Ender 3S1 and turn on the power switch on the side.
+1. Insert SD card into Ender 3S1 and turn on the power switch on the side.
 
-2、After Ender 3S1 is switched on, if you are using it for the first time, please select laser engrave.
+2. After Ender 3S1 is switched on, if you are using it for the first time, please select laser engrave.
 
 ### Notice: 
-1、To switch from fusing to laser engrave, select "Contror - "Switched Laser engraving"
+1. To switch from fusing to laser engrave, select "Contror - "Switched Laser engraving"
 
-2、The software pops up the following prompt box. Please ensure that the laser module is installed correctly and select "Confirm". ( Please note that Laser module must be installed and disassembled only under power off)
+2. The software pops up the following prompt box. Please ensure that the laser module is installed correctly and select "Confirm". ( Please note that Laser module must be installed and disassembled only under power off)
 
-3、Place the engraving material under the laser head,counter-clockwise push the fixed focus bar, adjust the laser focus to the appropriate value through the knob (different thickness of the material corresponding to different values), until the focusing bar touches the engraved material surface when natural vertical down. Finally, clockwise push the focusing bar until it is attached by the magnet, then select "Finish”.
+3. Place the engraving material under the laser head,counter-clockwise push the fixed focus bar, adjust the laser focus to the appropriate value through the knob (different thickness of the material corresponding to different values), until the focusing bar touches the engraved material surface when natural vertical down. Finally, clockwise push the focusing bar until it is attached by the magnet, then select "Finish”.
 Return to the main interface, select "Auto Home", wait for the machine back to zero completed.
 
-4、Select "Engrave" and press the knob to confirm. Select "Run Range", the laser head will move repeatedly around the maximum X and Y edges. You can adjust the engraving material to the right position.
+4. Select "Engrave" and press the knob to confirm. Select "Run Range", the laser head will move repeatedly around the maximum X and Y edges. You can adjust the engraving material to the right position.
 
-5、Press the “Directly Engrave” to start engraving. 
+5. Press the “Directly Engrave” to start engraving. 
 
 ### Notice:
 When engraving or cutting thin objects (e.g. paper), the laser may penetrate the object and leave marks. It is recommended to put a flat object which laser cannot penetrate, such as aluminium or stainless steel plates, before you put the engraving material.
@@ -77,13 +77,13 @@ Your feedback is very important to us, as it helps us improve even faster. Pleas
 
 In order to get responses in an efficient way, we recommend you to follow some guidelines:
 
-1、First of all, search for related issues.
+1. First of all, search for related issues.
 
-2、Detail the firmware version you're running.
+2. Detail the firmware version you're running.
 
-3、Explain to us the error or bug, so that we can test it properly.
+3. Explain to us the error or bug, so that we can test it properly.
 
-4、In the title, indicate the label of the issue. (For example: #issue)
+4. In the title, indicate the label of the issue. (For example: #issue)
 
 # Development Process
 The code is currently in development, trying to improve functionalities.
