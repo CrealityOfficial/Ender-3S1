@@ -237,7 +237,7 @@
 #endif
 #if ENABLED(CREALITY_ENDER3_2021)
 
-  #include "../../feature/PRE01_Power_loss/PRE01_Power_loss.h"
+  #include "feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 
@@ -374,10 +374,17 @@ void startOrResumeJob() {
   inline void abortSDPrinting() {
     IF_DISABLED(NO_SD_AUTOSTART, card.autofile_cancel());
     card.abortFilePrintNow(TERN_(SD_RESORT, true));
-    //rock_20211017
-     thermalManager.setTargetHotend(0, 0);
-    thermalManager.setTargetBed(0);
-    thermalManager.zero_fan_speeds();
+    #if HAS_CUTTER
+     if(laser_device.is_laser_device())
+     {
+     }else
+    #endif
+    {
+	    //rock_20211017
+	     thermalManager.setTargetHotend(0, 0);
+	    thermalManager.setTargetBed(0);
+	    thermalManager.zero_fan_speeds();
+	}
     queue.clear();
     //quickstop_stepper();
 
@@ -417,6 +424,7 @@ void startOrResumeJob() {
 
 #endif // SDSUPPORT
 
+  void get_sdcard_laser_range();
 /**
  * Minimal management of Marlin's core activities:
  *  - Keep the command buffer full
@@ -431,7 +439,7 @@ void startOrResumeJob() {
  *  - Pulse FET_SAFETY_PIN if it exists
  */
 inline void manage_inactivity(const bool ignore_stepper_queue=false) {
-
+  
   queue.get_available_commands();
 
   const millis_t ms = millis();
@@ -1296,7 +1304,6 @@ void setup() {
 
   SETUP_RUN(settings.first_load());   // Load data from EEPROM if available (or use defaults)
                                       // This also updates variables in the planner, elsewhere
-
   #if HAS_ETHERNET
     SETUP_RUN(ethernet.init());
   #endif
@@ -1317,6 +1324,7 @@ void setup() {
 
   SETUP_RUN(stepper.init());          // Init stepper. This enables interrupts!
 
+
   #if HAS_SERVOS
     SETUP_RUN(servo_init());
   #endif
@@ -1330,7 +1338,8 @@ void setup() {
   #endif
 
   #if HAS_CUTTER
-    SETUP_RUN(cutter.init());
+    //SETUP_RUN(cutter.init());
+    SETUP_RUN(laser_device.soft_pwm_init()); // 107011
   #endif
 
   #if ENABLED(COOLANT_MIST)
@@ -1569,68 +1578,29 @@ void setup() {
         // SERIAL_ECHOLNPAIR("demarcate_data.demarcate_set_bed[40]=: ", demarcate_data.demarcate_set_bed[3]);
       }
     }
-  #endif
-    #if ENABLED(POWER_LOSS_RECOVERY)
-    //如果检测到SD卡插入，才对其进行检查
-      if(IS_SD_INSERTED())
-      {
-            recovery.check();  //rock_20211016        
-        /*
-        my_report_logical_position(recovery.info.current_position);
-        SERIAL_ECHOLNPAIR("recovery.info.valid_head=: ", recovery.info.valid_head);
-        SERIAL_ECHO_MSG("\r\n");
-        SERIAL_ECHOLNPAIR("recovery.info.valid_foot=: ", recovery.info.valid_foot);
-        SERIAL_ECHO_MSG("\r\n");
-        SERIAL_ECHOLNPAIR("recovery.info.valid())=: ", recovery.info.valid());
-        SERIAL_ECHO_MSG("\r\n");
-        */
-      }
-      else
-      {
-        SERIAL_ECHOLN("<warning>SD card is not inserted, fail to read data!");
-      }
-       
+    #if HAS_CUTTER
+      laser_device.get_device_form_eeprom(); // 107011   
+      laser_device.get_z_axis_high_form_eeprom();
     #endif
+  #endif
 
-//     delay(3000);
-//     HAL_watchdog_refresh();
-//     job_recovery_info_t info_t;
-//      BL24CXX::read(800, (uint8_t*)&info_t, sizeof(info_t));
-//     my_report_logical_position(info_t.current_position);
-//     SERIAL_ECHOLNPAIR("recovery.info.valid_head=: ", info_t.valid_head);
-//     SERIAL_ECHO_MSG("\r\n");
-//     SERIAL_ECHOLNPAIR("recovery.info.valid_foot=: ", info_t.valid_foot);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR("recovery.info.valid())=: ", info_t.valid());
-//     SERIAL_ECHO_MSG("\r\n");
-//     delay(1000);
- 
-//   uint8_t pBuffer[1200] = {0};
-//   OUT_WRITE(BACKPOWER_CTRL_PIN, HIGH);
-//   BL24CXX::write(PLR_ADDR, pBuffer, sizeof(recovery.info));
-//  OUT_WRITE(BACKPOWER_CTRL_PIN, LOW);
-//   for(int i = 0; i < 500 ; i++)
-//   {
-//     HAL_watchdog_refresh();
-//     SERIAL_ECHOLNPAIR("i=  ", i);
-//     SERIAL_ECHOLNPAIR("pBuffer=: ", pBuffer[i]);
-//     SERIAL_ECHO_MSG("\r\n");
-//   }
-//   SERIAL_ECHOLNPAIR(" pBuffer[499]=: ", pBuffer[499]);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR(" pBuffer[599]=: ", pBuffer[599]);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR(" pBuffer[699]=: ", pBuffer[699]);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR(" pBuffer[799]=: ", pBuffer[799]);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR("pBuffer[899]=: ", pBuffer[899]);
-//     SERIAL_ECHO_MSG("\r\n");
-//       SERIAL_ECHOLNPAIR(" pBuffer[999]=: ", pBuffer[999]);
-//     SERIAL_ECHO_MSG("\r\n");
-// //SERIAL_ECHOLNPAIR("\r\npBuffer: ", BL24CXX::readOneByte(100));
-// uint8_t buf=0xff;
-//  //BL24CXX::read(800, &buf, 1100);
+  //激光模式时 打开激光 107011 -20211013
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) laser_device.laser_power_open();
+  #endif
+
+  #if ENABLED(POWER_LOSS_RECOVERY)
+  //如果检测到SD卡插入，才对其进行检查
+    if(IS_SD_INSERTED())
+    {
+
+        recovery.check();  //rock_20211016
+
+	}else
+    {
+      SERIAL_ECHOLN("<warning>SD card is not inserted, fail to read data!");
+    }
+  #endif
 
 
   #if ENABLED(DWIN_CREALITY_LCD)
@@ -1683,6 +1653,7 @@ void setup() {
   SETUP_LOG("setup() completed.");
 
   SERIAL_ECHOLNPAIR(" HMI_flag.language=: ", HMI_flag.language); //rock_20210909
+
 }
 
 /**
@@ -1723,12 +1694,14 @@ void loop()
 { 
   do {
     idle();
+
     #if ENABLED(SDSUPPORT)
       if (card.flag.abort_sd_printing)
       {
         abortSDPrinting();
-        //SERIAL_ECHOLN("M79 S4");
+        SERIAL_ECHOLN("M79 S4");
       } 
+
       if (marlin_state == MF_SD_COMPLETE) 
       {
         _remain_time=0;                 //rock_20210728
@@ -1736,6 +1709,7 @@ void loop()
         _remain_time=0;                 //rock_20210728
       }
     #endif
+
     queue.advance();
     endstops.event_handler();    
     #if ENABLED(ENABLE_AUTO_OFF_DISPLAY)

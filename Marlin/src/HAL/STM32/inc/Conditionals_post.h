@@ -19,13 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
+#pragma once
 
-/**
- * Creality S1 (STM32F103RET6) board pin assignments
- */
-#include "env_validate.h"
-
-#define __STM32F1__
-#include "../stm32f1/pins_CREALITY_S1.h"
-#undef DISABLE_DEBUG // DISABLE_(DEBUG|JTAG) is not supported for STM32F4.
-#undef __STM32F1__
+// If no real or emulated EEPROM selected, fall back to SD emulation
+#if USE_FALLBACK_EEPROM
+  #define SDCARD_EEPROM_EMULATION
+#elif EITHER(I2C_EEPROM, SPI_EEPROM)
+  #define USE_SHARED_EEPROM 1
+#endif

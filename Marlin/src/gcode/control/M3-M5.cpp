@@ -66,75 +66,67 @@
  *  PWM duty cycle goes from 0 (off) to 255 (always on).
  */
 void GcodeSuite::M3_M4(const bool is_M4) {
+
+  planner.synchronize();   // Wait for previous movement commands (G0/G1/G2/G3) to complete before changing power
+  if (parser.seen('I')) {
+    cutter.cutter_mode = is_M4 ? CUTTER_MODE_DYNAMIC : CUTTER_MODE_CONTINUOUS;
+    cutter.set_enabled(true);
+  }
+
   auto get_s_power = [] {
-    if (parser.seenval('S')) {
-      const float spwr = parser.value_float();
+    if (parser.seen('S')) {
+      cutter.unitPower = parser.value_ushort();
+      // PWM implied and ranges from S0 to S180 for a positional servo. Typical use would be a pen up/down function.
       #if ENABLED(SPINDLE_SERVO)
-        cutter.unitPower = spwr;
+        cutter.power = cutter.unitPower;
       #else
-        cutter.unitPower = TERN(SPINDLE_LASER_PWM,
-                              cutter.power_to_range(cutter_power_t(round(spwr))),
-                              spwr > 0 ? 255 : 0);
+        if (cutter.cutter_mode == CUTTER_MODE_STANDARD){ // PWM not implied, power converted to OCR from unit definition and min/max or on/off if not PWM.
+          if(laser_device.is_laser_device())
+          {
+              // 107011 激光模式下将S0-1000比例转换为S0-255
+              cutter.unitPower = laser_device.power16_to_8(cutter.unitPower);
+              //cutter.power= cutter.unitPower;
+          }else{ 
+            cutter.power = TERN(SPINDLE_LASER_PWM, cutter.power_to_range(cutter_power_t(cutter.unitPower)), cutter.unitPower > 0 ? 255 : 0);
+          }
+        }
       #endif
+      //cutter.menuPower = cutter.unitPower;
     }
-    else
+    else if (cutter.cutter_mode == CUTTER_MODE_STANDARD){
       cutter.unitPower = cutter.cpwr_to_upwr(SPEED_POWER_STARTUP);
-    return cutter.unitPower;
+    }
+    return cutter.unitPower;// cutter.unitPower;
   };
 
-  #if ENABLED(LASER_POWER_INLINE)
-    if (parser.seen('I') == DISABLED(LASER_POWER_INLINE_INVERT)) {
-      // Laser power in inline mode
-      cutter.inline_direction(is_M4); // Should always be unused
-      #if ENABLED(SPINDLE_LASER_PWM)
-        if (parser.seen('O')) {
-          cutter.unitPower = cutter.power_to_range(parser.value_byte(), 0);
-          cutter.inline_ocr_power(cutter.unitPower); // The OCR is a value from 0 to 255 (uint8_t)
-        }
-        else
-          cutter.inline_power(cutter.upower_to_ocr(get_s_power()));
-      #else
-        cutter.set_inline_enabled(true);
-      #endif
-      return;
-    }
-    // Non-inline, standard case
-    cutter.inline_disable(); // Prevent future blocks re-setting the power
-  #endif
-
-  planner.synchronize();   // Wait for previous movement commands (G0/G0/G2/G3) to complete before changing power
-  cutter.set_reverse(is_M4);
-
-  #if ENABLED(SPINDLE_LASER_PWM)
-    if (parser.seenval('O')) {
-      cutter.unitPower = cutter.power_to_range(parser.value_byte(), 0);
-      cutter.set_ocr_power(cutter.unitPower); // The OCR is a value from 0 to 255 (uint8_t)
-    }
-    else
-      cutter.set_power(cutter.upower_to_ocr(get_s_power()));
-  #elif ENABLED(SPINDLE_SERVO)
-    cutter.set_power(get_s_power());
-  #else
-    cutter.set_enabled(true);
-  #endif
-  cutter.menuPower = cutter.unitPower;
+  if (cutter.cutter_mode == CUTTER_MODE_CONTINUOUS || cutter.cutter_mode == CUTTER_MODE_DYNAMIC) {  // Laser power in inline mode
+    TERN_(LASER_FEATURE, cutter.inline_power(cutter.upower_to_ocr(get_s_power())));
+  }
+  else {
+    #if ENABLED(SPINDLE_LASER_PWM)
+      //cutter.set_power(cutter.upower_to_ocr(get_s_power())); // 107011-20210925 修复M3 S 命令无效的bug
+      cutter.apply_power(get_s_power());//107011 -20211008 cutter.set_ocr(cutter.upower_to_ocr(get_s_power())); // 107011-20210925 修复M3 S 命令无效的bug
+    #elif ENABLED(SPINDLE_SERVO)
+      cutter.set_power(get_s_power());
+    #else
+      cutter.set_enabled(true);
+    #endif
+    //cutter.set_reverse(is_M4); /107011-20210925 //修复M3 S 命令无效的bug
+  }
 }
 
 /**
  * M5 - Cutter OFF (when moves are complete)
  */
 void GcodeSuite::M5() {
-  #if ENABLED(LASER_POWER_INLINE)
-    if (parser.seen('I') == DISABLED(LASER_POWER_INLINE_INVERT)) {
-      cutter.set_inline_enabled(false); // Laser power in inline mode
-      return;
-    }
-    // Non-inline, standard case
-    cutter.inline_disable(); // Prevent future blocks re-setting the power
-  #endif
+  
   planner.synchronize();
-  cutter.set_enabled(false);
-  cutter.menuPower = cutter.unitPower;
+  if (parser.seen('I')) {
+    cutter.set_enabled(false);                  // Clear inline mode flags
+    cutter.cutter_mode = CUTTER_MODE_STANDARD;  // Switch from inline to standard mode, has no effect on current power output!
+  }
+  cutter.apply_power(0);                        // M5 kills power in either mode but if it's in inline it will be still be the active mode
+
 }
 
 #endif // HAS_CUTTER

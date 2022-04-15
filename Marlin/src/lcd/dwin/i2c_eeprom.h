@@ -4,19 +4,29 @@
 #include "../../inc/MarlinConfig.h"
 // #include "../../Marlin.h"
 
-#include <libmaple/gpio.h>
+#ifdef __STM32F1__
+  #include <libmaple/gpio.h>
+#else
+  #include "../../HAL/shared/Delay.h"
+  #define delay_us(n) DELAY_US(n)
+#endif
 
 
 /******************** IIC ********************/
 //IO方向设置
-#define SDA_IN()  {PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH&=0XFFFF0FFF;PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH|=8<<12;}
-#define SDA_OUT() {PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH&=0XFFFF0FFF;PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH|=3<<12;}
+#ifdef __STM32F1__
+  #define SDA_IN()  do{ PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH &= 0XFFFF0FFF; PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH |= 8 << 12; }while(0)
+  #define SDA_OUT() do{ PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH &= 0XFFFF0FFF; PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH |= 3 << 12; }while(0)
+#else
+  #define SDA_IN()  SET_INPUT(IIC_EEPROM_SDA)
+  #define SDA_OUT() SET_OUTPUT(IIC_EEPROM_SDA)
+#endif
 
 //IO操作函数	 
-#define IIC_SCL_0()   digitalWrite(IIC_EEPROM_SCL,LOW)
-#define IIC_SCL_1()   digitalWrite(IIC_EEPROM_SCL,HIGH)
-#define IIC_SDA_0()   digitalWrite(IIC_EEPROM_SDA,LOW)
-#define IIC_SDA_1()   digitalWrite(IIC_EEPROM_SDA,HIGH)
+#define IIC_SCL_0()   WRITE(IIC_EEPROM_SCL, LOW)
+#define IIC_SCL_1()   WRITE(IIC_EEPROM_SCL, HIGH)
+#define IIC_SDA_0()   WRITE(IIC_EEPROM_SDA, LOW)
+#define IIC_SDA_1()   WRITE(IIC_EEPROM_SDA, HIGH)
 #define READ_SDA()    READ(IIC_EEPROM_SDA)  
 
 //IIC所有操作函数

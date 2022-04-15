@@ -30,7 +30,7 @@
 #endif
 
 #ifndef BOARD_INFO_NAME
-  #define BOARD_INFO_NAME      "Creality PRE01"
+  #define BOARD_INFO_NAME      "CR-FDM-V24S1-301"
 #endif
 #ifndef DEFAULT_MACHINE_NAME
   #define DEFAULT_MACHINE_NAME "Ender 3 S1"
@@ -66,7 +66,6 @@
   #define Z_STOP_PIN_NADD    PA15   //Added z-axis limit switch  rock_20210816
 #else
   #define Z_STOP_PIN         PA15  //Z轴限位开关
-  #define Z_STOP_PIN          ONE
 #endif
 
 //#define one (c14 || a15)
@@ -222,11 +221,16 @@
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#if HAS_CUTTER
-  // #undef HEATER_0_PIN
-  // #undef HEATER_BED_PIN
-  #undef FAN_PIN
-  #define SPINDLE_LASER_ENA_PIN             PA0  // FET 1
-  #define SPINDLE_LASER_PWM_PIN             PA0  // Bed FET
-  #define SPINDLE_DIR_PIN                   PA0  // FET 4
-#endif
+ #if HAS_CUTTER
+   // #undef HEATER_0_PIN
+   // #undef HEATER_BED_PIN
+  // #undef FAN_PIN
+  // #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1    
+  // #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET  
+  // #define SPINDLE_DIR_PIN                  PC0  // FET 4   
+   #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1
+   #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET
+   #define SPINDLE_DIR_PIN                  PC0  // FET 4
+   
+   #define LASER_SOFT_PWM_PIN				PC0  //激光软PWM引脚
+  #endif

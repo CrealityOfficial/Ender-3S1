@@ -387,6 +387,7 @@
 #define BOARD_ANET_ET4                4226  // ANET ET4 V1.x (STM32F407VGT6)
 #define BOARD_ANET_ET4P               4227  // ANET ET4P V1.x (STM32F407VGT6)
 #define BOARD_FYSETC_CHEETAH_V20      4228  // FYSETC Cheetah V2.0
+#define BOARD_CREALITY_S1_F401RC      4229  // Creality S1/S1_Pro (STM32F401RC)
 
 
 //

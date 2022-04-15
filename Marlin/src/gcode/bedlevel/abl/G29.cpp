@@ -68,7 +68,7 @@
   #include "../../../module/tool_change.h"
 #endif
 
-#include "../../module/settings.h"
+#include "../../../module/settings.h"
 
 #if ABL_USES_GRID
   #if ENABLED(PROBE_Y_FIRST)

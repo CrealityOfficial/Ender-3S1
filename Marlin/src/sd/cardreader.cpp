@@ -520,6 +520,18 @@ void CardReader::openAndPrintFile(const char *name) {
   queue.inject(cmd);
 }
 
+#if HAS_CUTTER //107011 -20210913 
+/*
+* 打开G-code文件，但是没有执行打印
+*/
+void CardReader::openAndPausePrintFile(const char *name) {
+  char cmd[4 + strlen(name) + 1 + 3 + 1]; // Room for "M23 ", filename, "\n", "M24", and null
+  sprintf_P(cmd, M23_STR, name);
+  for (char *c = &cmd[4]; *c; c++) *c = tolower(*c);
+  queue.inject(cmd);
+}
+#endif // #if HAS_CUTTER
+
 /**
  * Start or resume a media print by setting the sdprinting flag.
  * The file browser pre-sort is also purged to free up memory,

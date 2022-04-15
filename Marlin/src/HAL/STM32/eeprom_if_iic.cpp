@@ -21,11 +21,34 @@
  */
 
 /**
- * Creality S1 (STM32F103RET6) board pin assignments
+ * Platform-independent Arduino functions for I2C EEPROM.
+ * Enable USE_SHARED_EEPROM if not supplied by the framework.
  */
-#include "env_validate.h"
 
-#define __STM32F1__
-#include "../stm32f1/pins_CREALITY_S1.h"
-#undef DISABLE_DEBUG // DISABLE_(DEBUG|JTAG) is not supported for STM32F4.
-#undef __STM32F1__
+#if defined(STM32F1) || defined(STM32F4)
+
+#include "../../inc/MarlinConfig.h"
+
+#if ENABLED(IIC_BL24CXX_EEPROM)
+
+#include "../../libs/BL24CXX.h"
+#include "../shared/eeprom_if.h"
+
+void eeprom_init() { BL24CXX::init(); }
+
+// ------------------------
+// Public functions
+// ------------------------
+
+void eeprom_write_byte(uint8_t *pos, unsigned char value) {
+  const unsigned eeprom_address = (unsigned)pos;
+  return BL24CXX::writeOneByte(eeprom_address, value);
+}
+
+uint8_t eeprom_read_byte(uint8_t *pos) {
+  const unsigned eeprom_address = (unsigned)pos;
+  return BL24CXX::readOneByte(eeprom_address);
+}
+
+#endif // IIC_BL24CXX_EEPROM
+#endif // STM32F1 || STM32F4

@@ -53,7 +53,7 @@ GcodeSuite gcode;
   #include "../feature/cancel_object.h"
 #endif
 
-#if ENABLED(LASER_MOVE_POWER)
+#if ENABLED(LASER_FEATURE)
   #include "../feature/spindle_laser.h"
 #endif
 
@@ -66,7 +66,7 @@ GcodeSuite gcode;
 #endif
 
 #include "../MarlinCore.h" // for idle, kill
-
+#include "../lcd/dwin/e3v2/dwin.h"  //
 
 // Inactivity shutdown
 millis_t GcodeSuite::previous_move_ms = 0,
@@ -180,6 +180,7 @@ void GcodeSuite::get_destination_from_command() {
       #endif
     #endif
 
+  //if(1){;} //107011 -20211008如果不加这行 下一行if(parser.linearval('F') > 0)会无效， bug未知， 之后再找
   asm("nop");
   asm("nop");//rock_20211009  解决不能设置速度的问题。
   if (parser.linearval('F') > 0)
@@ -195,15 +196,33 @@ void GcodeSuite::get_destination_from_command() {
     M165();
   #endif
 
-  #if ENABLED(LASER_MOVE_POWER)
-    // Set the laser power in the planner to configure this move
-    if (parser.seen('S')) {
-      const float spwr = parser.value_float();
-      cutter.inline_power(TERN(SPINDLE_LASER_PWM, cutter.power_to_range(cutter_power_t(round(spwr))), spwr > 0 ? 255 : 0));
+  #if ENABLED(LASER_FEATURE)
+    if(laser_device.is_laser_device()){ //FDM 打印激光Gcode时，"S"参数会造成死机
+      if (cutter.cutter_mode == CUTTER_MODE_CONTINUOUS || cutter.cutter_mode == CUTTER_MODE_DYNAMIC) {
+        // Set the cutter power in the planner to configure this move
+        cutter.last_feedrate_mm_m = 0;
+        if (WITHIN(parser.codenum, 1, TERN(ARC_SUPPORT, 3, 1)) || TERN0(BEZIER_CURVE_SUPPORT, parser.codenum == 5)) {
+          planner.laser_inline.status.isPowered = true;
+          if (parser.seen('S')) {
+            const uint16_t spwr = parser.value_ushort();
+            if(laser_device.is_laser_device())
+            {
+              //将0-1000 转0-255
+              cutter.inline_power(laser_device.power16_to_8(spwr));
+            }else {
+              cutter.inline_power(cutter.power_to_range(cutter_power_t(spwr)));
+            }
+          }else{ // 107011 -20210925 不带S参数的关闭激光
+            cutter.inline_power(0);
+          }
+        }
+        else if (parser.codenum == 0) {
+          planner.laser_inline.status.isPowered = false; // For dynamic mode we need to flag it off
+          planner.laser_inline.power = 0;                // This is planner-based so only set power and do not disable inline control flags.
+        }
+      }
     }
-    else if (ENABLED(LASER_MOVE_G0_OFF) && parser.codenum == 0) // G0
-      cutter.set_inline_enabled(false);
-  #endif
+  #endif // LASER_FEATURE
 }
 
 /**
@@ -299,7 +318,9 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       return;
     }
   #endif
-  
+  //云打印中断料后禁止响应Gcode指令
+   if(HMI_flag.cloud_printing_flag&&HMI_flag.disable_queued_cmd)return; 
+
   // Handle a known command or reply "unknown command"
 
   switch (parser.command_letter) {

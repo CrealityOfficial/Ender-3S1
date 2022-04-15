@@ -171,16 +171,16 @@ void GcodeSuite::M79()
             Draw_Print_ProgressRemain();                   //增加停止打印的跳转页面
             HMI_flag.cloud_printing_flag=false;           //云打印开始标志位
             // queue.inject_P(PSTR("G1 F1200 X0 Y0"));
-            // card.flag.abort_sd_printing = true;            
+            // card.flag.abort_sd_printing = true;
+            Goto_MainMenu(); 
             // gcode.process_subcommands_now_P(PSTR(EVENT_GCODE_SD_ABORT));  //rock_20210729               
           }
           else 
           {
             //  abortFilePrintSoon(); //云端控制SD卡打印停止。 
-            card.flag.abort_sd_printing = true;           
-            // gcode.process_subcommands_now_P(PSTR(EVENT_GCODE_SD_ABORT));  //rock_20210729
+            card.flag.abort_sd_printing = true;
+            gcode.process_subcommands_now_P(PSTR(EVENT_GCODE_SD_ABORT));  //rock_20210729
           }
-          Goto_MainMenu(); 
         #endif
         break;
 

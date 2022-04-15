@@ -47,11 +47,13 @@
 
 #include "../../MarlinCore.h" // for startOrResumeJob
 
+#if HAS_CUTTER
+#include "../../feature/spindle_laser.h"
+#endif
 /**
  * M24: Start or Resume SD Print
  */
 void GcodeSuite::M24() {
-
   #if ENABLED(DGUS_LCD_UI_MKS)
     if ((print_job_timer.isPaused() || print_job_timer.isRunning()) && !parser.seen("ST"))
       MKS_resume_print_move();
@@ -69,12 +71,21 @@ void GcodeSuite::M24() {
     }
   #endif
 
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()) // 107011-20210925 激光模式
+    {
+      laser_device.remove_card_before_is_printing = true; //记录拔卡之前的打印状态,用于拔卡恢复时判断 20211020
+      cutter.apply_power(laser_device.power); // 恢复激光功率
+      //暂停后恢复时先跑到之前的位置 
+      //if(print_job_timer.isPaused()) do_blocking_move_to_xy(laser_device.pause_before_position_x, laser_device.pause_before_position_y, homing_feedrate(X_AXIS));//107011- 20211105 暂停逻辑改为了，停在最后执行位置， 因此屏蔽掉此行
+    }
+  #endif
+
   if (card.isFileOpen()) {
     card.startOrResumeFilePrinting();            // SD card will now be read for commands
     startOrResumeJob();               // Start (or resume) the print job timer
     TERN_(POWER_LOSS_RECOVERY, recovery.prepare());
   }
-
   #if ENABLED(HOST_ACTION_COMMANDS)
     #ifdef ACTION_ON_RESUME
       host_action_resume();
@@ -132,6 +143,17 @@ void GcodeSuite::M25() {
     #endif
 
     print_job_timer.pause();
+
+    //107011 -20210926
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device()){
+        //记录当前位置
+        laser_device.pause_before_position_x = current_position.x;
+        laser_device.pause_before_position_y = current_position.y;
+        laser_device.power = cutter.power;
+      }
+
+    #endif
 
     TERN_(DGUS_LCD_UI_MKS, MKS_pause_print_move());
     

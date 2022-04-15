@@ -31,6 +31,7 @@
 
 #include "../../../libs/BL24CXX.h"  //Marlin\src\libs\BL24CXX.h
 
+
 #if ENABLED(EXTENSIBLE_UI)
   #include "../../../lcd/extui/ui_api.h"
 #endif
@@ -92,8 +93,6 @@ void GcodeSuite::M1000()
         
       #endif
         TERN_(EXTENSIBLE_UI, ExtUI::onPrintTimerStopped());
-
-        card.flag.abort_sd_printing=true;// rock_20211231
       }
       else
       recovery.resume();
