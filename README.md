@@ -1,90 +1,96 @@
-# Marlin 3D Printer Firmware
+# Ender-3S1 Firmware
 
-![GitHub](https://img.shields.io/github/license/marlinfirmware/marlin.svg)
-![GitHub contributors](https://img.shields.io/github/contributors/marlinfirmware/marlin.svg)
-![GitHub Release Date](https://img.shields.io/github/release-date/marlinfirmware/marlin.svg)
-[![Build Status](https://github.com/MarlinFirmware/Marlin/workflows/CI/badge.svg?branch=bugfix-2.0.x)](https://github.com/MarlinFirmware/Marlin/actions)
+Creality, dedicating to bringing benefits to human beings via technology innovations, has received support from both users and 3D printing enthusiasts. With gratefulness, Creality wants to continue the pace of making the world a better place with you all. This time, Creality will open the source code and we believe GitHub is the way to go. 
 
-<img align="right" width=175 src="buildroot/share/pixmaps/logo/marlin-250.png" />
+This is the repository that contains the source code and the development versions of the firmware running on the Creality [Ender-3 S1](https://www.creality.com/goods-detail/creality-ender-3-s1-3d-printer). It's based on the well-known Marlin but with modifications.
 
-Additional documentation can be found at the [Marlin Home Page](https://marlinfw.org/).
-Please test this firmware and let us know if it misbehaves in any way. Volunteers are standing by!
+The firmware for the Creality Ender-3S1 is proudly based on Marlin2.0 byScott Lahteine (@thinkyhead), Roxanne Neufeld (@Roxy-3D), Chris Pepper (@p3p), Bob Kuhn (@Bob-the-Kuhn), João Brazio (@jbrazio), Erik van der Zalm (@ErikZalm) and is distributed under the terms of the GNU GPL 3 license.
 
-## Marlin 2.0
+If you want to download the latest firmware version, go to Releases page and download the needed files. In the [releases](https://github.com/CrealityOfficial/Ender-3S1) page you will find the source code and the SD Files needed for the LCD Display. After that, normally you need to update the SD files of the display and gradually complete the updates of menus, graphics and functionalities. 
 
-Marlin 2.0 takes this popular RepRap firmware to the next level by adding support for much faster 32-bit and ARM-based boards while improving support for 8-bit AVR boards. Read about Marlin's decision to use a "Hardware Abstraction Layer" below.
+Please refer to: [YouTube](https://youtu.be/B4egner2JMM)
+In order to get instructions on how to flash the firmware and load new LCD SD files to the display. 
 
-Download earlier versions of Marlin on the [Releases page](https://github.com/MarlinFirmware/Marlin/releases).
 
-## Example Configurations
+# New Features
+1. Repair the bug of slow printing speed with Cloud APP.
+2. Repair the bug of losing gcode file while resume printing.
+3. Repair the bug of slow speed when printing threading.
+4. Repair the bug that the parameter setting of "Control-Motion-Jerk " cannot be saved.
+5. Repair the bug that Z-axis acceleration cannot be set to 100-200m/s2.
+7. Repair the bug that the interface of auto leveling function doesn’t exit when CR-touch is abnormal.
+8. Repair the bug that the computer port sends the “Pause” (M25) command but the display doesn’t synchronize show the “Continue printing” page when online printing.
 
-Before building Marlin you'll need to configure it for your specific hardware. Your vendor should have already provided source code with configurations for the installed firmware, but if you ever decide to upgrade you'll need updated configuration files. Marlin users have contributed dozens of tested example configurations to get you started. Visit the [MarlinFirmware/Configurations](https://github.com/MarlinFirmware/Configurations) repository to find the right configuration for your hardware.
+# Special Point
+A special structure on Ender 3S1 we must introduce is expansion port, which can fulfill more possibility, especially support CV-Laser module.
 
-## Building Marlin 2.0
+How to start CV-Laser function?
 
-To build Marlin 2.0 you'll need [Arduino IDE 1.8.8 or newer](https://www.arduino.cc/en/main/software) or [PlatformIO](http://docs.platformio.org/en/latest/ide.html#platformio-ide). Detailed build and install instructions are posted at:
+Four steps: Check-Install-Use-Engrave
 
-  - [Installing Marlin (Arduino)](http://marlinfw.org/docs/basics/install_arduino.html)
-  - [Installing Marlin (VSCode)](http://marlinfw.org/docs/basics/install_platformio_vscode.html).
+## Check firmware version
+When using the laser module on Ender-3 S1 for the first time, please check if the motherboard firmware and screen firmware are the applicable versions respectively. 
+Please connect the machine to power supply, turn on the power switch on the side, select "Control" - "Info", to check if the firmware version is V1.0.4 or above.
 
-### Supported Platforms
+## How to install CrealityPrint software
+1、Please download “Creality Print” to install in [Creality official website](https://www.creality.com/download)
 
-  Platform|MCU|Example Boards
-  --------|---|-------
-  [Arduino AVR](https://www.arduino.cc/)|ATmega|RAMPS, Melzi, RAMBo
-  [Teensy++ 2.0](http://www.microchip.com/wwwproducts/en/AT90USB1286)|AT90USB1286|Printrboard
-  [Arduino Due](https://www.arduino.cc/en/Guide/ArduinoDue)|SAM3X8E|RAMPS-FD, RADDS, RAMPS4DUE
-  [ESP32](https://github.com/espressif/arduino-esp32)|ESP32|FYSETC E4, E4d@BOX, MRR
-  [LPC1768](http://www.nxp.com/products/microcontrollers-and-processors/arm-based-processors-and-mcus/lpc-cortex-m-mcus/lpc1700-cortex-m3/512kb-flash-64kb-sram-ethernet-usb-lqfp100-package:LPC1768FBD100)|ARM® Cortex-M3|MKS SBASE, Re-ARM, Selena Compact
-  [LPC1769](https://www.nxp.com/products/processors-and-microcontrollers/arm-microcontrollers/general-purpose-mcus/lpc1700-cortex-m3/512kb-flash-64kb-sram-ethernet-usb-lqfp100-package:LPC1769FBD100)|ARM® Cortex-M3|Smoothieboard, Azteeg X5 mini, TH3D EZBoard
-  [STM32F103](https://www.st.com/en/microcontrollers-microprocessors/stm32f103.html)|ARM® Cortex-M3|Malyan M200, GTM32 Pro, MKS Robin, BTT SKR Mini
-  [STM32F401](https://www.st.com/en/microcontrollers-microprocessors/stm32f401.html)|ARM® Cortex-M4|ARMED, Rumba32, SKR Pro, Lerdge, FYSETC S6
-  [STM32F7x6](https://www.st.com/en/microcontrollers-microprocessors/stm32f7x6.html)|ARM® Cortex-M7|The Borg, RemRam V1
-  [SAMD51P20A](https://www.adafruit.com/product/4064)|ARM® Cortex-M4|Adafruit Grand Central M4
-  [Teensy 3.5](https://www.pjrc.com/store/teensy35.html)|ARM® Cortex-M4|
-  [Teensy 3.6](https://www.pjrc.com/store/teensy36.html)|ARM® Cortex-M4|
-  [Teensy 4.0](https://www.pjrc.com/store/teensy40.html)|ARM® Cortex-M7|
-  [Teensy 4.1](https://www.pjrc.com/store/teensy41.html)|ARM® Cortex-M7|
-  Linux Native|x86/ARM/etc.|Raspberry Pi
+2、Double click to open the software installation package, click "Next-"Accept".
 
-## Submitting Changes
+3、Confirm the installation location of the software, click "Browse"-"Next"- "Install"-"Finish".
 
-- Submit **Bug Fixes** as Pull Requests to the ([bugfix-2.0.x](https://github.com/MarlinFirmware/Marlin/tree/bugfix-2.0.x)) branch.
-- Follow the [Coding Standards](http://marlinfw.org/docs/development/coding_standards.html) to gain points with the maintainers.
-- Please submit your questions and concerns to the [Issue Queue](https://github.com/MarlinFirmware/Marlin/issues).
+## How to use CrealityPrint software
+1、Add Ender 3S1 into software.
 
-## Marlin Support
+2、Make sure the current status is “Laser”.
 
-The Issue Queue is reserved for Bug Reports and Feature Requests. To get help with configuration and troubleshooting, please use the following resources:
+3、Click on the "Picture" button on the left and find the image file you need to engrave. Open to import the picture into the CrealityPrint software.
 
-- [Marlin Documentation](http://marlinfw.org) - Official Marlin documentation
-- [Marlin Discord](https://discord.gg/n5NJ59y) - Discuss issues with Marlin users and developers
-- Facebook Group ["Marlin Firmware"](https://www.facebook.com/groups/1049718498464482/)
-- RepRap.org [Marlin Forum](http://forums.reprap.org/list.php?415)
-- [Tom's 3D Forums](https://forum.toms3d.org/)
-- Facebook Group ["Marlin Firmware for 3D Printers"](https://www.facebook.com/groups/3Dtechtalk/)
-- [Marlin Configuration](https://www.youtube.com/results?search_query=marlin+configuration) on YouTube
+4、Adjust the position, size, rotation angle and other parameters of the file in the right-hand console, setting the processing mode and working parameters, finally preview the processing effect of it.
 
-## Contributors
+5、Finally, click on "Generate G-Code" to save the engraving file on the SD card.
 
-Marlin is constantly improving thanks to a huge number of contributors from all over the world bringing their specialties and talents. Huge thanks are due to [all the contributors](https://github.com/MarlinFirmware/Marlin/graphs/contributors) who regularly patch up bugs, help direct traffic, and basically keep Marlin from falling apart. Marlin's continued existence would not be possible without them.
+## How to engrave
+1、Insert SD card into Ender 3S1 and turn on the power switch on the side.
 
-## Administration
+2、After Ender 3S1 is switched on, if you are using it for the first time, please select laser engrave.
 
-Regular users can open and close their own issues, but only the administrators can do project-related things like add labels, merge changes, set milestones, and kick trolls. The current Marlin admin team consists of:
+### Notice: 
+1、To switch from fusing to laser engrave, select "Contror - "Switched Laser engraving"
 
- - Scott Lahteine [[@thinkyhead](https://github.com/thinkyhead)] - USA - Project Maintainer &nbsp; [![Donate](https://api.flattr.com/button/flattr-badge-large.png)](http://www.thinkyhead.com/donate-to-marlin)
- - Roxanne Neufeld [[@Roxy-3D](https://github.com/Roxy-3D)] - USA
- - Keith Bennett [[@thisiskeithb](https://github.com/thisiskeithb)] - USA
- - Victor Oliveira [[@rhapsodyv](https://github.com/rhapsodyv)] - Brazil
- - Chris Pepper [[@p3p](https://github.com/p3p)] - UK
- - Jason Smith [[@sjasonsmith](https://github.com/sjasonsmith)] - USA
- - Luu Lac [[@sjasonsmith](https://github.com/sjasonsmith)] - USA
- - Bob Kuhn [[@Bob-the-Kuhn](https://github.com/Bob-the-Kuhn)] - USA
- - Erik van der Zalm [[@ErikZalm](https://github.com/ErikZalm)] - Netherlands &nbsp; [![Flattr Erik](https://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=ErikZalm&url=https://github.com/MarlinFirmware/Marlin&title=Marlin&language=&tags=github&category=software)
+2、The software pops up the following prompt box. Please ensure that the laser module is installed correctly and select "Confirm". ( Please note that Laser module must be installed and disassembled only under power off)
 
-## License
+3、Place the engraving material under the laser head,counter-clockwise push the fixed focus bar, adjust the laser focus to the appropriate value through the knob (different thickness of the material corresponding to different values), until the focusing bar touches the engraved material surface when natural vertical down. Finally, clockwise push the focusing bar until it is attached by the magnet, then select "Finish”.
+Return to the main interface, select "Auto Home", wait for the machine back to zero completed.
 
-Marlin is published under the [GPL license](/LICENSE) because we believe in open development. The GPL comes with both rights and obligations. Whether you use Marlin firmware as the driver for your open or closed-source product, you must keep Marlin open, and you must provide your compatible Marlin source code to end users upon request. The most straightforward way to comply with the Marlin license is to make a fork of Marlin on Github, perform your modifications, and direct users to your modified fork.
+4、Select "Engrave" and press the knob to confirm. Select "Run Range", the laser head will move repeatedly around the maximum X and Y edges. You can adjust the engraving material to the right position.
 
-While we can't prevent the use of this code in products (3D printers, CNC, etc.) that are closed source or crippled by a patent, we would prefer that you choose another firmware or, better yet, make your own.
+5、Press the “Directly Engrave” to start engraving. 
+
+### Notice:
+When engraving or cutting thin objects (e.g. paper), the laser may penetrate the object and leave marks. It is recommended to put a flat object which laser cannot penetrate, such as aluminium or stainless steel plates, before you put the engraving material.
+
+You can develop more functions through the source code, such as water cooling, CNC and other functions.
+
+# Issues and Suggestions
+Your feedback is very important to us, as it helps us improve even faster. Please test this firmware and let us know if it misbehaves in any way. We are standing by!
+
+In order to get responses in an efficient way, we recommend you to follow some guidelines:
+
+1、First of all, search for related issues.
+
+2、Detail the firmware version you're running.
+
+3、Explain to us the error or bug, so that we can test it properly.
+
+4、In the title, indicate the label of the issue. (For example: #issue)
+
+# Development Process
+The code is currently in development, trying to improve functionalities.
+Since it’s possible for the **advanced users** to contribute in firmware development, we suppose you know the points even if they have not been clearly illustrated by Creality.
+
+The master branch is stable and it's currently of the version 2.0.x. The master branch stores code created by Creality. Once a release is done, the users, get to upgrade the version and give feedback to us. We get to know the bugs as well as optimization based on the feedback from you and Creality will make a decision on what to be included into the master branch. 
+
+By integrating suggested improvements, we will make a branch from the version.
+
+This is a classic code development process and we want more, so we really want you to participate from the very beginning.
