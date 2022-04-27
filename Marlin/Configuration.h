@@ -69,9 +69,11 @@
 // @section info
 
 // Author info of this build printed to the host during boot and M115
-#define STRING_CONFIG_H_AUTHOR "creality" // Who made the changes.
+#define STRING_CONFIG_H_AUTHOR "Creality" // Who made the changes.
 //#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
 
+// 自定义Z轴限位方式   rock_20220301
+#define Z_AXIS_LIMIT_MODE  0  //1 为Z轴限位开关  0 为 CRTouch
 /**
  * *** VENDORS PLEASE READ ***
  *
@@ -84,7 +86,12 @@
  */
 
 // Show the Marlin bootscreen on startup. ** ENABLE FOR PRODUCTION **
-#define SHOW_BOOTSCREEN
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+// #define SHOW_BOOTSCREEN
+#else
+  #define SHOW_BOOTSCREEN
+#endif
+
 
 // Show the bitmap in Marlin/_Bootscreen.h on startup.
 //#define SHOW_CUSTOM_BOOTSCREEN
@@ -137,10 +144,26 @@
 // Enable the Bluetooth serial interface on AT90USB devices
 //#define BLUETOOTH
 
+//Choose your mother board IC
+// #define STM32F401RC_creality
+#define STM32F103RET6_creality
+
 // Choose the name from boards.h that matches your setup
 #ifndef MOTHERBOARD
-  #define MOTHERBOARD BOARD_CREALITY_S1
+  #ifdef STM32F103RET6_creality
+    #define MOTHERBOARD BOARD_CREALITY_S1
+  #elif ENABLED(STM32F401RC_creality)
+    #define MOTHERBOARD BOARD_CREALITY_S1_F401RC
+  #endif
 #endif
+
+// Release version
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+#define SHORT_BUILD_VERSION "V3.0.3_Z"
+#else
+#define SHORT_BUILD_VERSION "V3.0.3"
+#endif
+
 
 // Name displayed in the LCD "Ready" message and Info menu
 #define CUSTOM_MACHINE_NAME "Ender-3 S1" 
@@ -689,8 +712,14 @@
 
 #define THERMAL_PROTECTION_HOTENDS // Enable thermal protection for all extruders
 #define THERMAL_PROTECTION_BED     // Enable thermal protection for the heated bed
-#define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
-#define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+  // #define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
+  // #define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
+#else
+  #define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
+  #define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
+#endif
+
 
 //===========================================================================
 //============================= Mechanical Settings =========================
@@ -757,7 +786,12 @@
 #define X_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
 #define Y_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
 #define Z_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
-#define Z_MIN_PROBE_ENDSTOP_INVERTING false // Set to true to invert the logic of the probe.
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+    #define Z_MIN_PROBE_ENDSTOP_INVERTING true // Set to true to invert the logic of the probe.
+#else
+    #define Z_MIN_PROBE_ENDSTOP_INVERTING false // Set to true to invert the logic of the probe.
+#endif
+
 
 /**
  * Stepper Drivers
@@ -1021,7 +1055,12 @@
  *使用喷嘴作为探针，就像使用导电
  *喷嘴系统或压电智能效应器。
  */
-//#define NOZZLE_AS_PROBE
+
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+    #define NOZZLE_AS_PROBE
+#else
+    //#define NOZZLE_AS_PROBE
+#endif
 
 /**
  * Z Servo Probe, such as an endstop switch on a rotating arm.
@@ -1038,8 +1077,12 @@
 /**
  *BLTouch 探头使用霍尔效应传感器并模拟伺服。
  */ 
-#define BLTOUCH
 
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+  //#define BLTOUCH
+#else
+    #define BLTOUCH
+#endif
 /**
  * Touch-MI Probe by hotends.fr
  *
@@ -1130,9 +1173,14 @@
  *     |    [-]    |
  *     O-- FRONT --+
  */
+
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+// #define NOZZLE_TO_PROBE_OFFSET { -40, -50, 0 }  //(-40,-60,0)
+  #define NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }
+#else
 // #define NOZZLE_TO_PROBE_OFFSET { -40, -50, 0 }  //(-40,-60,0)
 #define NOZZLE_TO_PROBE_OFFSET { -31.8, -40.5, 0 }
-
+#endif
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.
 #define PROBING_MARGIN  3
@@ -1469,7 +1517,12 @@
  */
 //#define AUTO_BED_LEVELING_3POINT
 //#define AUTO_BED_LEVELING_LINEAR
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+// #define AUTO_BED_LEVELING_BILINEAR
+#else
 #define AUTO_BED_LEVELING_BILINEAR
+#endif
+
 
 //#define AUTO_BED_LEVELING_UBL
 //#define MESH_BED_LEVELING
@@ -1479,7 +1532,12 @@
  * these options to restore the prior leveling state or to always enable
  * leveling immediately after G28.
  */
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+// #define RESTORE_LEVELING_AFTER_G28
+#else
 #define RESTORE_LEVELING_AFTER_G28
+#endif
+
 //#define ENABLE_LEVELING_AFTER_G28
 
 /**

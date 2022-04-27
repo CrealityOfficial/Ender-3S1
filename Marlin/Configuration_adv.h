@@ -810,7 +810,12 @@
    * This feature was designed for Deltabots with very fast Z moves; however, higher speed Cartesians
    * might be able to use it. If the machine can't raise Z fast enough the BLTouch may go into ALARM.
    */
-  #define BLTOUCH_HS_MODE   // Creality Active High Speed BLTouch mode
+  #if ENABLED(Z_AXIS_LIMIT_MODE)
+// #define BLTOUCH_HS_MODE   // Creality Active High Speed BLTouch mode
+#else
+#define BLTOUCH_HS_MODE   // Creality Active High Speed BLTouch mode
+#endif
+  
 
   // Safety: Enable voltage mode settings in the LCD menu.
   //#define BLTOUCH_LCD_VOLTAGE_MENU
@@ -1803,7 +1808,7 @@
 #if ENABLED(BABYSTEPPING)
   //#define INTEGRATED_BABYSTEPPING         // EXPERIMENTAL integration of babystepping into the Stepper ISR
   //#define BABYSTEP_WITHOUT_HOMING
-  #define BABYSTEP_ALWAYS_AVAILABLE       // Allow babystepping at all times (not just during movement).
+  // #define BABYSTEP_ALWAYS_AVAILABLE       // Allow babystepping at all times (not just during movement).
   //#define BABYSTEP_XY                     // Also enable X/Y Babystepping. Not supported on DELTA!
   #define BABYSTEP_INVERT_Z false           // Change if Z babysteps should go the other way
   #define BABYSTEP_MILLIMETER_UNITS       // Specify BABYSTEP_MULTIPLICATOR_(XY|Z) in mm instead of micro-steps
@@ -1820,7 +1825,7 @@
     #endif
   #endif
 
-  #define BABYSTEP_DISPLAY_TOTAL          // Display total babysteps since last G28  rock_20210827
+  // #define BABYSTEP_DISPLAY_TOTAL          // Display total babysteps since last G28  rock_20210827
 
   #define BABYSTEP_ZPROBE_OFFSET          // Combine M851 Z and Babystepping  rock_20210827
   #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
@@ -1911,7 +1916,12 @@
  * Repeatedly attempt G29 leveling until it succeeds.
  * Stop after G29_MAX_RETRIES attempts.
  */
-#define G29_RETRY_AND_RECOVER       // Creality recovery if there was an error
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+  //#define G29_RETRY_AND_RECOVER       // Creality recovery if there was an error
+#else
+  #define G29_RETRY_AND_RECOVER       // Creality recovery if there was an error
+#endif
+
 #if ENABLED(G29_RETRY_AND_RECOVER)
   #define G29_MAX_RETRIES 3
   #define G29_HALT_ON_FAILURE

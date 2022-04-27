@@ -24,7 +24,6 @@
  * Creality S1 (STM32F103RET6) board pin assignments
  */
 #include "env_validate.h"
-
 #if HOTENDS > 1 || E_STEPPERS > 1
   #error "Creality S1 only supports one hotend / E-stepper. Comment out this line to continue."
 #endif
