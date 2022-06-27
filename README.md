@@ -8,7 +8,7 @@ The firmware for the Creality Ender-3S1 is proudly based on Marlin2.0 byScott La
 
 If you want to download the latest firmware version, go to Releases page and download the needed files. In the [releases](https://github.com/CrealityOfficial/Ender-3S1) page you will find the source code and the SD Files needed for the LCD Display. After that, normally you need to update the SD files of the display and gradually complete the updates of menus, graphics and functionalities. 
 
-Please refer to: [YouTube](https://youtu.be/B4egner2JMM)
+Please refer to: [YouTube](https://www.youtube.com/watch?v=NmoRRFW4zTc)
 In order to get instructions on how to flash the firmware and load new LCD SD files to the display. 
 
 
