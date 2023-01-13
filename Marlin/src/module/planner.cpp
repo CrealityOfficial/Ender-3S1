@@ -105,6 +105,8 @@
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if HAS_CUTTER
@@ -1835,8 +1837,8 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
   OPTARG(HAS_POSITION_FLOAT, const xyze_pos_t &target_float)
   OPTARG(HAS_DIST_MM_ARG, const xyze_float_t &cart_dist_mm)
   , feedRate_t fr_mm_s, const uint8_t extruder, const_float_t millimeters/*=0.0*/
-) 
-{
+) {
+
   const int32_t da = target.a - position.a,
                 db = target.b - position.b,
                 dc = target.c - position.c;
@@ -2717,6 +2719,7 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
   TERN_(HAS_POSITION_FLOAT, position_float = target_float);
   TERN_(GRADIENT_MIX, mixer.gradient_control(target_float.z));
   TERN_(POWER_LOSS_RECOVERY, block->sdpos = recovery.command_sdpos());
+  TERN_(CREALITY_POWER_LOSS, block->sdpos = pre01_power_loss.command_sdpos());
 
   return true;        // Movement was accepted
 
@@ -3109,13 +3112,11 @@ void Planner::set_max_acceleration(const uint8_t axis, float inMaxAccelMMS2) {
       const xyze_float_t max_acc_edit_scaled = max_accel_edit * 2;
     #endif
     limit_and_warn(inMaxAccelMMS2, axis, PSTR("Acceleration"), max_acc_edit_scaled);
-
   #endif
   settings.max_acceleration_mm_per_s2[axis] = inMaxAccelMMS2;
 
   // Update steps per s2 to agree with the units per s2 (since they are used in the planner)
   reset_acceleration_rates();
-
 }
 
 /**

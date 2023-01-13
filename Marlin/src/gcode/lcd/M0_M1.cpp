@@ -41,11 +41,17 @@
   #include "../../feature/host_actions.h"
 #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  #include "../../lcd/dwin/lcd_rts.h"
+#endif
+
 /**
  * M0: Unconditional stop - Wait for user button press on LCD
  * M1: Conditional stop   - Wait for user button press on LCD
  */
 void GcodeSuite::M0_M1() {
+
+  TERN_(RTS_AVAILABLE, RTS_CommandPause());
   millis_t ms = 0;
   if (parser.seenval('P')) ms = parser.value_millis();              // Milliseconds to wait
   if (parser.seenval('S')) ms = parser.value_millis_from_seconds(); // Seconds to wait

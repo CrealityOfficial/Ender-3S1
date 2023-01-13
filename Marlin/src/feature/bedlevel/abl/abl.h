@@ -22,6 +22,9 @@
 #pragma once
 
 #include "../../../inc/MarlinConfigPre.h"
+#include "../../../feature/bedlevel/bedlevel.h"
+
+#if ENABLED(AUTO_BED_LEVELING_BILINEAR)
 
 extern xy_pos_t bilinear_grid_spacing, bilinear_start;
 extern xy_float_t bilinear_grid_factor;
@@ -43,3 +46,5 @@ void refresh_bed_level();
 #define _GET_MESH_X(I) float(bilinear_start.x + (I) * bilinear_grid_spacing.x)
 #define _GET_MESH_Y(J) float(bilinear_start.y + (J) * bilinear_grid_spacing.y)
 #define Z_VALUES_ARR  z_values
+
+#endif

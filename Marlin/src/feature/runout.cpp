@@ -32,8 +32,8 @@
 
 FilamentMonitor runout;
 
-bool FilamentMonitorBase::enabled = true,
-     FilamentMonitorBase::filament_ran_out;  // = false
+bool FilamentMonitorBase::enabled = true,  //���ϼ��ʹ�ܱ�־λ
+     FilamentMonitorBase::filament_ran_out;  // = false  ���ϼ��״̬��־λ
 
 #if ENABLED(HOST_ACTION_COMMANDS)
   bool FilamentMonitorBase::host_handling; // = false
@@ -72,6 +72,10 @@ bool FilamentMonitorBase::enabled = true,
 
 void event_filament_runout(const uint8_t extruder) {
 
+  #if ENABLED(FILAMENT_RUNOUT_SENSOR_DEBUG)
+    SERIAL_ECHOLNPAIR("\r\ndid_pause_print: ", did_pause_print);
+  #endif
+  //�жϻ���ʱ���Ѿ���ͣ��did_pause_print =1 ˵�������Ѿ���ͣ��ֱ���˳�
   if (did_pause_print) return;  // Action already in progress. Purge triggered repeated runout.
 
   #if ENABLED(TOOLCHANGE_MIGRATION_FEATURE)
@@ -137,7 +141,7 @@ void event_filament_runout(const uint8_t extruder) {
         SERIAL_ECHOPGM("Runout Command: ");
         SERIAL_ECHOLNPGM(FILAMENT_RUNOUT_SCRIPT);
       #endif
-      queue.inject_P(PSTR(FILAMENT_RUNOUT_SCRIPT));
+      queue.inject_P(PSTR(FILAMENT_RUNOUT_SCRIPT));  
     #endif
   }
 }

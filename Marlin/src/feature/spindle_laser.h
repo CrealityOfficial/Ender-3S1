@@ -388,6 +388,7 @@ class spindle_laser_soft_pwm
     }else{
       current_device = DEVICE_UNKNOWN;
     }
+    // SERIAL_ECHOPAIR("\nget_device_form_eeprom()=", current_device);
   }
 
   //从eeprom中读取Z轴高度 current_position.z 
@@ -400,11 +401,13 @@ class spindle_laser_soft_pwm
     data = buff[0];
     data = (data<<8)|buff[1];
 
+    if(data == 0xFFFF) data = 0;
+    
     //>LASER_Z_AXIS_HIGHT_MAX 判断为无效数据
     if(data>LASER_Z_AXIS_HIGH_MAX*100) data = LASER_Z_AXIS_HIGH_MAX*100;
 
     laser_z_axis_high = data/100.0;
-
+    // SERIAL_ECHOPAIR("\nget_z_axis_high_form_eeprom()=", laser_z_axis_high);
     return data/100.0;
   }
 
@@ -413,7 +416,9 @@ class spindle_laser_soft_pwm
   void save_device_to_eeprom()
   {
     BL24CXX::write(LASER_FDM_ADDR, (uint8_t *)&current_device, 1);
+    delay(10);
     //SERIAL_ECHOLNPAIR("save_device_to_eeprom", buff[0]);
+    //SERIAL_ECHOPAIR("\nsave_device_to_eeprom()=", current_device);
   }
 
   //保存Z轴高度到EEPROM
@@ -428,7 +433,9 @@ class spindle_laser_soft_pwm
     buff[1] = high&0xff;
 
     BL24CXX::write(LASER_Z_AXIS_HIGH_ADDR, &buff[0], 2);
+    delay(10);
     laser_z_axis_high = data;
+    //SERIAL_ECHOPAIR("\nlaser_z_axis_high=", laser_z_axis_high);
   }
 
 

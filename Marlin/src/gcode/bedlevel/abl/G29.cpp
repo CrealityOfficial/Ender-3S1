@@ -69,6 +69,11 @@
 #endif
 
 #include "../../../module/settings.h"
+#include "../../../sd/cardreader.h"
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../../../lcd/dwin/lcd_rts.h"
+#endif
 
 #if ABL_USES_GRID
   #if ENABLED(PROBE_Y_FIRST)
@@ -218,19 +223,16 @@ public:
  *     Include "E" to engage/disengage the Z probe for each sample.
  *     There's no extra effect if you have a fixed Z probe.
  */
-G29_TYPE GcodeSuite::G29() 
-{
-  // settings.reset(); //rock_20210827 恢复出厂设置
-
-  /* close all heater */
-
-  
-
+G29_TYPE GcodeSuite::G29() {
   TERN_(PROBE_MANUALLY, static) G29_State abl;
 
   TERN_(FULL_REPORT_TO_HOST_FEATURE, set_and_report_grblstate(M_PROBE));
 
   reset_stepper_timeout();
+// #if ENABLED(RTS_AVAILABLE)
+//   G29_flag = true;
+//   Count_probe = 0;
+// #endif
 
   const bool seenQ = EITHER(DEBUG_LEVELING_FEATURE, PROBE_MANUALLY) && parser.seen_test('Q');
 
@@ -258,15 +260,8 @@ G29_TYPE GcodeSuite::G29()
     process_subcommands_now_P(TERN(G28_L0_ENSURES_LEVELING_OFF, PSTR("G28L0"), G28_STR));
 
   // Don't allow auto-leveling without homing first
-  if (homing_needed_error())    
-  {
-    // 修复 不接BLtouch时 调平界面不消失的bug
-    #if ENABLED(DWIN_CREALITY_LCD) //rock_20211013 解决没有crtouch时，自动调平卡在回零界面不退出到主界面的问题。
-      DWIN_CompletedLeveling();
-    #endif
+  if (homing_needed_error()) G29_RETURN(false);
 
-    G29_RETURN(false);
-  }
   #if ENABLED(AUTO_BED_LEVELING_3POINT)
     vector_3 points[3];
     probe.get_three_points(points);
@@ -279,8 +274,7 @@ G29_TYPE GcodeSuite::G29()
   /**
    * On the initial G29 fetch command parameters.
    */
-  if (!g29_in_progress) 
-  {
+  if (!g29_in_progress) {
 
     TERN_(HAS_MULTI_HOTEND, if (active_extruder) tool_change(0));
 
@@ -449,7 +443,7 @@ G29_TYPE GcodeSuite::G29()
         G29_RETURN(false);
       }
     #endif
-
+    //do_blocking_move_to_z(_MAX(Z_CLEARANCE_BETWEEN_PROBES, Z_CLEARANCE_DEPLOY_PROBE));
     #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
       if (TERN1(PROBE_MANUALLY, !no_action)
         && (abl.gridSpacing != bilinear_grid_spacing || abl.probe_position_lf != bilinear_start)
@@ -621,13 +615,16 @@ G29_TYPE GcodeSuite::G29()
     #if ABL_USES_GRID
 
       bool zig = PR_OUTER_SIZE & 1;  // Always end at RIGHT and BACK_PROBE_BED_POSITION
-
+      
       abl.measured_z = 0;
 
       // Outer loop is X with PROBE_Y_FIRST enabled
       // Outer loop is Y with PROBE_Y_FIRST disabled
-      for (PR_OUTER_VAR = 0; PR_OUTER_VAR < PR_OUTER_SIZE && !isnan(abl.measured_z); PR_OUTER_VAR++) {
-
+    #if ENABLED(RTS_AVAILABLE)
+      for (PR_OUTER_VAR = 0 ; PR_OUTER_VAR < PR_OUTER_SIZE && !isnan(abl.measured_z); PR_OUTER_VAR++) {
+    #else
+      for (PR_OUTER_VAR = 0 ; PR_OUTER_VAR < PR_OUTER_SIZE && !isnan(abl.measured_z); PR_OUTER_VAR++) {
+    #endif
         int8_t inStart, inStop, inInc;
 
         if (zig) {                      // Zig away from origin
@@ -657,7 +654,7 @@ G29_TYPE GcodeSuite::G29()
           // Avoid probing outside the round or hexagonal area
           if (TERN0(IS_KINEMATIC, !probe.can_reach(abl.probePos))) continue;
 
-          if (abl.verbose_level) SERIAL_ECHOLNPAIR("Probing mesh point ", pt_index, "/", abl.abl_points, ".");
+          if (abl.verbose_level) SERIAL_ECHOLNPAIR("Probing mesh point ", pt_index, "/", abl.abl_points, "."); //pt_index Ŀǰ�ĵ�ƽ�㣬abl.abl_points�ܵĵ�ƽ����
           TERN_(HAS_STATUS_MESSAGE, ui.status_printf_P(0, PSTR(S_FMT " %i/%i"), GET_TEXT(MSG_PROBING_MESH), int(pt_index), int(abl.abl_points)));
 
           abl.measured_z = faux ? 0.001f * random(-100, 101) : probe.probe_at_point(abl.probePos, raise_after, abl.verbose_level);
@@ -689,6 +686,23 @@ G29_TYPE GcodeSuite::G29()
             z_values[abl.meshCount.x][abl.meshCount.y] = z;
             TERN_(EXTENSIBLE_UI, ExtUI::onMeshUpdate(abl.meshCount, z));
 
+          #endif
+
+          #if ENABLED(RTS_AVAILABLE)
+              if(!IS_SD_PRINTING())
+              {
+                // if((showcount ++) < GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y)
+                // {
+                //   rtscheck.RTS_SndData(((showcount * 50) / (GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y)), AUTO_BED_LEVEL_TITLE_VP);
+                //   rtscheck.RTS_SndData(((showcount * 100) / (GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y)), AUTO_LEVELING_PERCENT_DATA_VP);
+                //   rtscheck.RTS_SndData(ExchangePageBase + 26, ExchangepageAddr);
+                //   change_page_font = 26;
+                // }
+                  rtscheck.RTS_SndData((uint16_t)((6.25 * pt_index) / 2) , AUTO_BED_LEVEL_TITLE_VP);  //6.25Ϊ 1/16 ��Ϊ16���ƽ����Ĺ�ʽ��������Ҫ�޸��㷨
+                  rtscheck.RTS_SndData((uint16_t)(6.25 * pt_index), AUTO_LEVELING_PERCENT_DATA_VP);
+                  rtscheck.RTS_SndData(ExchangePageBase + 26, ExchangepageAddr);
+                  change_page_font = 26;
+              }
           #endif
 
           abl.reenable = false;
@@ -756,9 +770,11 @@ G29_TYPE GcodeSuite::G29()
   // Calculate leveling, print reports, correct the position
   if (!isnan(abl.measured_z)) {
     #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
+
       if (!abl.dryrun) extrapolate_unprobed_bed_level();
       print_bilinear_leveling_grid();
-   
+
+      settings.save();
       refresh_bed_level();
 
       TERN_(ABL_BILINEAR_SUBDIVISION, print_bilinear_leveling_grid_virt());
@@ -907,17 +923,31 @@ G29_TYPE GcodeSuite::G29()
     planner.synchronize();
     process_subcommands_now_P(PSTR(Z_PROBE_END_SCRIPT));
   #endif
-   settings.save();
-    process_subcommands_now_P(PSTR("G28"));  //回原点
-    process_subcommands_now_P("G1 Z0");
-    report_current_position();
 
   #if ENABLED(DWIN_CREALITY_LCD)
     DWIN_CompletedLeveling();
   #endif
 
+  settings.save();
+  process_subcommands_now_P(PSTR("G28"));  //��ԭ��
+  // process_subcommands_now_P("G1 Z10");// 修改为z10 与屏幕显示的数据保持一致
+  process_subcommands_now_P("G1 Z0");// Z10 有偏移风险
+  report_current_position();
+
+  //do_blocking_move_to_xy(safe_homing_xy);
+
+  #if ENABLED(RTS_AVAILABLE)
+    // G29_flag = false;
+    // Count_probe = 0;
+    // Count_first = 0;
+    RTS_AutoBedLevelPage();
+
+  #endif
+
   TERN_(FULL_REPORT_TO_HOST_FEATURE, set_and_report_grblstate(M_IDLE));
+
   G29_RETURN(isnan(abl.measured_z));
+
 }
 
 #endif // HAS_ABL_NOT_UBL

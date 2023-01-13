@@ -48,7 +48,6 @@
 typedef enum : int8_t {
   H_NONE = -6,
   H_COOLER, H_PROBE, H_REDUNDANT, H_CHAMBER, H_BED,
-  H_FAN0,H_FAN1,
   H_E0, H_E1, H_E2, H_E3, H_E4, H_E5, H_E6, H_E7
 } heater_id_t;
 
@@ -150,7 +149,7 @@ enum ADCSensorState : char {
   #if HAS_ADC_BUTTONS
     Prepare_ADC_KEY, Measure_ADC_KEY,
   #endif
-  #ifdef CREALITY_ENDER3_2021 //---------zy
+  #if ENABLED(CREALITY_POWER_LOSS) //---------zy
     Prepare_PowerCheck, Measure_PowerCheck,
   #endif 
   SensorsReady, // Temperatures ready. Delay the next round of readings to let ADC pins settle.
@@ -957,18 +956,5 @@ class Temperature {
 
     #endif // HAS_THERMAL_PROTECTION
 };
-
-#if ENABLED(EEPROM_DEMARCATE)
-    //温度标定结构体
-    typedef struct demarcate_data
-    {
-      uint8_t demarcate_save_flag;              //"Y" 被标定过  "N"未被标定
-      int8_t  demarcate_set_nozzle[DEMARCATE_NUMBER];  //标定过的喷嘴温差数据缓冲区
-      int8_t  demarcate_set_bed[DEMARCATE_NUMBER];  //标定过的热床温差数据缓冲区
-      uint8_t demarcate_crc;                   //标定数据CRC校验位  目前预留
-    }DEMARCATE_T;
-
-    extern DEMARCATE_T demarcate_data;  //  标定数据
-#endif
 
 extern Temperature thermalManager;

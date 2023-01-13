@@ -190,8 +190,7 @@
  *   E - Report E stepper position (Requires M114_DETAIL)
  *   R - Report the realtime position instead of projected.
  */
-void GcodeSuite::M114() 
-{
+void GcodeSuite::M114() {
 
   #if ENABLED(M114_DETAIL)
     if (parser.seen_test('D')) {

@@ -36,6 +36,10 @@
   #include "../../feature/runout.h"
 #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  #include "../dwin/lcd_rts.h"
+#endif
+
 //
 // Change Filament > Change/Unload/Load Filament
 //
@@ -243,16 +247,25 @@ void menu_pause_option() {
   ACTION_ITEM(MSG_FILAMENT_CHANGE_OPTION_PURGE, []{ pause_menu_response = PAUSE_RESPONSE_EXTRUDE_MORE; });
 
   #if HAS_FILAMENT_SENSOR
-    const bool still_out = runout.filament_ran_out;
+    //断料检测引脚的状态runout.filament_ran_out = 1 为缺料， 0为耗材已加载
+    const bool still_out = runout.filament_ran_out;  
     if (still_out)
-      EDIT_ITEM(bool, MSG_RUNOUT_SENSOR, &runout.enabled, runout.reset);
+      EDIT_ITEM(bool, MSG_RUNOUT_SENSOR, &runout.enabled, runout.reset);  //LCD12864菜单选择是否开启断料检测
   #else
     constexpr bool still_out = false;
   #endif
 
-  if (!still_out)
+  if (!still_out)  //~0 为真，说明此时耗材已经装载了，需要用户确认，则继续打印
+  {
     ACTION_ITEM(MSG_FILAMENT_CHANGE_OPTION_RESUME, []{ pause_menu_response = PAUSE_RESPONSE_RESUME_PRINT; });
-
+    #if ENABLED(RTS_AVAILABLE)
+        rtscheck.RTS_SndData(ExchangePageBase + 8, ExchangepageAddr);
+        change_page_font = 8;
+      #if ENABLED(FILAMENT_RUNOUT_SENSOR_DEBUG)
+        SERIAL_ECHOLNPAIR("\r\npause_menu_response: ", pause_menu_response);
+      #endif
+    #endif
+  }
   END_MENU();
 }
 

@@ -63,6 +63,12 @@
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
+#endif
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
 #endif
 
 #include "../libs/nozzle.h"
@@ -388,7 +394,10 @@ bool pause_print(const_float_t retract, const xyz_pos_t &park_point, const bool 
   #endif
 
   TERN_(HOST_PROMPT_SUPPORT, host_prompt_open(PROMPT_INFO, PSTR("Pause"), DISMISS_STR));
-
+  #if ENABLED(RTS_AVAILABLE)
+    rtscheck.RTS_SndData(ExchangePageBase + 7, ExchangepageAddr);
+    change_page_font = 7;
+  #endif
   // Indicate that the printer is paused
   ++did_pause_print;
 
@@ -412,15 +421,11 @@ bool pause_print(const_float_t retract, const xyz_pos_t &park_point, const bool 
   #if ENABLED(POWER_LOSS_RECOVERY)
     // Save PLR info in case the power goes out while parked
     const float park_raise = do_park ? nozzle.park_mode_0_height(park_point.z) - current_position.z : POWER_LOSS_ZRAISE;
-    if (was_sd_printing && recovery.enabled)
-    {
-      #if ENABLED(CREALITY_ENDER3_2021)
-      //////
-      #else 
-        recovery.save(true, park_raise, do_park);//rock_20211016
-      #endif
-      
-    }
+    if (was_sd_printing && recovery.enabled) recovery.save(true, park_raise, do_park);
+  #elif ENABLED(CREALITY_POWER_LOSS)
+    // Save PLR info in case the power goes out while parked
+    const float park_raise = do_park ? nozzle.park_mode_0_height(park_point.z) - current_position.z : POWER_LOSS_ZRAISE;
+    if (was_sd_printing && pre01_power_loss.enabled) pre01_power_loss.save(true, park_raise, do_park);
   #endif
 
   // Wait for buffered blocks to complete
@@ -438,6 +443,14 @@ bool pause_print(const_float_t retract, const xyz_pos_t &park_point, const bool 
 
   // If axes don't need to home then the nozzle can park
   if (do_park) nozzle.park(0, park_point); // Park the nozzle by doing a Minimum Z Raise followed by an XY Move
+  // if(!planner.has_blocks_queued())
+  // {
+  //   if(axis_is_trusted(X_AXIS) || axis_is_trusted(Y_AXIS))
+  //   {
+  //     // if (!axes_need_homing())
+  //     nozzle.park(0, park_point);
+  //   }
+  // } 
 
   #if ENABLED(DUAL_X_CARRIAGE)
     const int8_t saved_ext        = active_extruder;
@@ -447,7 +460,12 @@ bool pause_print(const_float_t retract, const xyz_pos_t &park_point, const bool 
 
   // Unload the filament, if specified
   if (unload_length)
-    unload_filament(unload_length, show_lcd, PAUSE_MODE_CHANGE_FILAMENT);
+  {
+    #if ENABLED(CR10_STOCKDISPLAY)
+      unload_filament(unload_length, show_lcd, PAUSE_MODE_CHANGE_FILAMENT);
+    #endif
+  }
+    
 
   #if ENABLED(DUAL_X_CARRIAGE)
     set_duplication_enabled(saved_ext_dup_mode, saved_ext);
@@ -494,7 +512,7 @@ void wait_for_confirmation(const bool is_reload/*=false*/, const int8_t max_beep
   // Start the heater idle timers
   const millis_t nozzle_timeout = SEC_TO_MS(PAUSE_PARK_NOZZLE_TIMEOUT);
 
-  HOTEND_LOOP() thermalManager.heater_idle[e].start(nozzle_timeout);
+  HOTEND_LOOP() thermalManager.heater_idle[e].start(nozzle_timeout); //超时时间到了之后关闭喷头加热
 
   #if ENABLED(DUAL_X_CARRIAGE)
     const int8_t saved_ext        = active_extruder;
@@ -503,10 +521,48 @@ void wait_for_confirmation(const bool is_reload/*=false*/, const int8_t max_beep
   #endif
 
   // Wait for filament insert by user and press button
+  //等待耗材插入 用户并按下继续打印的操作按钮
   KEEPALIVE_STATE(PAUSED_FOR_USER);
   TERN_(HOST_PROMPT_SUPPORT, host_prompt_do(PROMPT_USER_CONTINUE, GET_TEXT(MSG_NOZZLE_PARKED), CONTINUE_STR));
   TERN_(EXTENSIBLE_UI, ExtUI::onUserConfirmRequired_P(GET_TEXT(MSG_NOZZLE_PARKED)));
-  wait_for_user = true;    // LCD click or M108 will clear this
+  #if ENABLED(RTS_AVAILABLE)
+    while (runout.filament_ran_out)
+    {
+      // SERIAL_ECHOLNPAIR("\r\nwait_for_confirmation_2...");
+      // If the nozzle has timed out...
+      if (!nozzle_timed_out)
+        HOTEND_LOOP() nozzle_timed_out |= thermalManager.heater_idle[e].timed_out;
+      // Wait for the user to press the button to re-heat the nozzle, then
+      // re-heat the nozzle, re-show the continue prompt, restart idle timers, start over
+      if (nozzle_timed_out) {
+        SERIAL_ECHO_MSG(_PMSG(STR_FILAMENT_CHANGE_HEAT));
+
+        // wait_for_user_response(0, true); // Wait for LCD click or M108
+
+        // Re-enable the heaters if they timed out
+        HOTEND_LOOP() thermalManager.reset_hotend_idle_timer(e);
+
+        // Wait for the heaters to reach the target temperatures
+        ensure_safe_temperature(false);
+
+        // Start the heater idle timers
+        const millis_t nozzle_timeout = SEC_TO_MS(PAUSE_PARK_NOZZLE_TIMEOUT);
+
+        HOTEND_LOOP() thermalManager.heater_idle[e].start(nozzle_timeout);
+        // wait_for_user = true;
+        nozzle_timed_out = false;
+      }
+      else if(card.flag.abort_sd_printing)
+      {
+        runout.reset();
+        return;
+      }
+
+      idle_no_sleep();
+    }
+    
+  #else
+    wait_for_user = true;    // LCD click or M108 will clear this
   while (wait_for_user) {
     impatient_beep(max_beep_count);
 
@@ -552,6 +608,8 @@ void wait_for_confirmation(const bool is_reload/*=false*/, const int8_t max_beep
     }
     idle_no_sleep();
   }
+  #endif
+
   #if ENABLED(DUAL_X_CARRIAGE)
     set_duplication_enabled(saved_ext_dup_mode, saved_ext);
   #endif
@@ -664,17 +722,12 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
   if (print_job_timer.isPaused()) print_job_timer.start();
 
   #if ENABLED(SDSUPPORT)
-    if (did_pause_print) 
-    {
+    if (did_pause_print) {
       --did_pause_print;
       card.startOrResumeFilePrinting();
       // Write PLR now to update the z axis value
-      #if ENABLED(CREALITY_ENDER3_2021)
-      //////
-      #else 
-         TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true));  //rock_20211016
-      #endif
-
+      TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true));
+      TERN_(CREALITY_POWER_LOSS, if (pre01_power_loss.enabled) pre01_power_loss.save(true));
     }
   #endif
 

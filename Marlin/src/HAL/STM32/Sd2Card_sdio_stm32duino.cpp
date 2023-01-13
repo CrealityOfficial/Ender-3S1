@@ -282,7 +282,13 @@
     if (src) {
       hdma_sdio.Init.Direction = DMA_MEMORY_TO_PERIPH;
       HAL_DMA_Init(&hdma_sdio);
-      ret = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)src, block, 1);
+      // extern uint8_t plrstep;
+      // if(plrstep == 2)
+      // {
+      //   ret = HAL_OK;
+      // }
+      // else
+        ret = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)src, block, 1);
     }
     else {
       hdma_sdio.Init.Direction = DMA_PERIPH_TO_MEMORY;

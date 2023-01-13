@@ -33,6 +33,10 @@
   #include "../../feature/caselight.h"
 #endif
 
+#include "../../MarlinCore.h"
+
+// uint8_t wifi_enable_flag;
+
 #if ENABLED(EXTENDED_CAPABILITIES_REPORT)
   static void cap_line(PGM_P const name, bool ena=false) {
     SERIAL_ECHOPGM("Cap:");
@@ -52,13 +56,23 @@ void GcodeSuite::M115() {
     "FIRMWARE_NAME:Marlin " DETAILED_BUILD_VERSION " (" __DATE__ " " __TIME__ ") "
     "SOURCE_CODE_URL:" SOURCE_CODE_URL " "
     "PROTOCOL_VERSION:" PROTOCOL_VERSION " "
-    "MACHINE_TYPE:" MACHINE_NAME " "
+    "MACHINE_TYPE:" MACHINE_TYPE " "
     "EXTRUDER_COUNT:" STRINGIFY(EXTRUDERS) " "
     #ifdef MACHINE_UUID
       "UUID:" MACHINE_UUID
     #endif
   );
 
+    // SERIAL_ECHOLNPGM(STR_M115_REPORT);
+  // if(wifi_enable_flag)
+  // {
+  //   SERIAL_ECHOLNPGM(STR_M115_ENABLE_REPORT);
+  // }
+  // else
+  // {
+  //   SERIAL_ECHOLNPGM(STR_M115_DISABLE_REPORT);
+  // }
+  
   #if ENABLED(EXTENDED_CAPABILITIES_REPORT)
 
     // The port that sent M115

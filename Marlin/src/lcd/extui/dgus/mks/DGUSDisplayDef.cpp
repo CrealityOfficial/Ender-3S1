@@ -84,11 +84,7 @@ void MKS_pause_print_move() {
   position_before_pause = current_position;
 
   // Save the current position, the raise amount, and 'already raised'
-    #if ENABLED(CREALITY_ENDER3_2021)
-      //////
-    #else 
-      TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true, mks_park_pos.z, true)); //rock_20211016
-    #endif
+  TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true, mks_park_pos.z, true));
 
   destination.z = _MIN(current_position.z + mks_park_pos.z, Z_MAX_POS);
   prepare_internal_move_to_destination(park_speed_z);
@@ -97,18 +93,14 @@ void MKS_pause_print_move() {
   prepare_internal_move_to_destination(park_speed_xy);
 }
 
-void MKS_resume_print_move() 
-{
+void MKS_resume_print_move() {
   destination.set(position_before_pause.x, position_before_pause.y);
   prepare_internal_move_to_destination(park_speed_xy);
   destination.z = position_before_pause.z;
   prepare_internal_move_to_destination(park_speed_z);
-    #if ENABLED(CREALITY_ENDER3_2021)
-      //////
-      #else 
-        TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true));//rock_20211016
-      #endif
+  TERN_(POWER_LOSS_RECOVERY, if (recovery.enabled) recovery.save(true));
 }
+
 float z_offset_add = 0;
 
 xyz_int_t tmc_step; // = { 0, 0, 0 }

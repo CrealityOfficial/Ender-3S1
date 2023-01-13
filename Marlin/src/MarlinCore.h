@@ -75,6 +75,8 @@ bool printingIsPaused();
 void startOrResumeJob();
 
 extern bool wait_for_heatup;
+extern uint8_t language_change_font;
+// extern uint8_t wifi_enable_flag;
 
 #if HAS_RESUME_CONTINUE
   extern bool wait_for_user;

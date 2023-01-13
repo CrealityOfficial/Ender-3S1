@@ -24,10 +24,10 @@
 /**
  * Release version. Leave the Marlin version or apply a custom scheme.
  */
-
-#ifndef SHORT_BUILD_VERSION
-  #define SHORT_BUILD_VERSION "V1.0.6_C"
-#endif
+// #ifndef SHORT_BUILD_VERSION
+//   //#define SHORT_BUILD_VERSION "2.0.8.16" // F401版本
+//   //#define SHORT_BUILD_VERSION "2.0.8.16F1" //F103版本
+// #endif
 
 /**
  * Verbose version identifier containing a unique identifier, such as the
@@ -43,7 +43,7 @@
  * version was tagged.
  */
 #ifndef STRING_DISTRIBUTION_DATE
-  #define STRING_DISTRIBUTION_DATE "2021-10-14"
+  #define STRING_DISTRIBUTION_DATE __DATE__
 #endif
 
 /**
@@ -74,7 +74,7 @@
  * Define a generic printer name to be output to the LCD after booting Marlin.
  */
 #ifndef MACHINE_NAME
-  #define MACHINE_NAME "Ender-3 S1"
+  #define MACHINE_NAME "Ender-3 S1 Pro"
 #endif
 
 /**

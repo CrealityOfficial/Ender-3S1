@@ -191,7 +191,7 @@ static unsigned int sw=0, laser_h = 0, laser_l = 0;
 
 void laser_timer_soft_pwm_start(uint8_t pwm)
 {
-  //SERIAL_ECHOLNPAIR("laser_timer_soft_pwm_start():", pwm);
+  //SERIAL_ECHOLNPAIR("laser_pwm_start():", pwm);
   
   if(pwm>255) pwm =255;
   if(pwm<=0) pwm = 1; //107011 -20211011 要求激光常开
@@ -232,7 +232,7 @@ void laser_timer_soft_pwm_close()
 void laser_timer_handler(void)
 {
 //	SERIAL_ECHO_MSG("laser_timer_handler");
-  
+
   switch(sw)
   {
   case 0:

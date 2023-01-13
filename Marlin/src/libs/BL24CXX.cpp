@@ -33,7 +33,6 @@
   #include "../HAL/shared/Delay.h"
   #define delay_us(n) DELAY_US(n)
 #endif
-
 #ifndef EEPROM_WRITE_DELAY
   #define EEPROM_WRITE_DELAY    10
 #endif
@@ -42,6 +41,7 @@
 #endif
 
 // IO direction setting
+// IO direction setting
 #ifdef __STM32F1__
   #define SDA_IN()  do{ PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH &= 0XFFFF0FFF; PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH |= 8 << 12; }while(0)
   #define SDA_OUT() do{ PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH &= 0XFFFF0FFF; PIN_MAP[IIC_EEPROM_SDA].gpio_device->regs->CRH |= 3 << 12; }while(0)
@@ -49,7 +49,6 @@
   #define SDA_IN()  SET_INPUT(IIC_EEPROM_SDA)
   #define SDA_OUT() SET_OUTPUT(IIC_EEPROM_SDA)
 #endif
-
 // IO ops
 #define IIC_SCL_0()   WRITE(IIC_EEPROM_SCL, LOW)
 #define IIC_SCL_1()   WRITE(IIC_EEPROM_SCL, HIGH)
@@ -200,8 +199,7 @@ uint8_t BL24CXX::readOneByte(uint16_t ReadAddr) {
 // Write a data at the address specified by BL24CXX
 // WriteAddr: The destination address for writing data
 // DataToWrite: the data to be written
-void BL24CXX::writeOneByte(uint16_t WriteAddr, uint8_t DataToWrite) 
-{
+void BL24CXX::writeOneByte(uint16_t WriteAddr, uint8_t DataToWrite) {
   IIC::start();
   if (EE_TYPE > BL24C16) {
     IIC::send_byte(EEPROM_DEVICE_ADDRESS);        // Send write command
@@ -217,7 +215,7 @@ void BL24CXX::writeOneByte(uint16_t WriteAddr, uint8_t DataToWrite)
     IIC::send_byte(DataToWrite);                    // Receiving mode
     IIC::wait_ack();
     IIC::stop();                                    // Generate a stop condition
-    delay(5);
+  delay(10);
 }
 
 // Start writing data of length Len at the specified address in BL24CXX
@@ -255,8 +253,7 @@ bool BL24CXX::_check() {
 }
 
 bool BL24CXX::check() {
-  if (_check())
-  {                                           // Value was written? Good EEPROM!
+  if (_check()) {                                           // Value was written? Good EEPROM!
     writeOneByte(BL24CXX_TEST_ADDRESS, BL24CXX_TEST_VALUE); // Write now and check.
     return _check();
   }
@@ -276,17 +273,9 @@ void BL24CXX::read(uint16_t ReadAddr, uint8_t *pBuffer, uint16_t NumToRead) {
 // WriteAddr: the address to start writing, 0~255 for 24c02
 // pBuffer: the first address of the data array
 // NumToWrite: the number of data to be written
-void BL24CXX::write(uint16_t WriteAddr, uint8_t *pBuffer, uint16_t NumToWrite) 
-{
+void BL24CXX::write(uint16_t WriteAddr, uint8_t *pBuffer, uint16_t NumToWrite) {
   for (; NumToWrite; NumToWrite--, WriteAddr++)
-  {
     writeOneByte(WriteAddr, *pBuffer++);
   }    
-}
 
-void BL24CXX::EEPROM_Reset(uint16_t WriteAddr, uint8_t *pBuffer, uint16_t NumToWrite)
-{
-	write(WriteAddr, 0, NumToWrite);
-  delay(200);
-}
 #endif // IIC_BL24CXX_EEPROM

@@ -114,6 +114,7 @@ void GCodeParser::parse(char *p) {
 
   reset(); // No codes to report
 
+  //把接收到Gcode转成大写
   auto uppercase = [](char c) {
     if (TERN0(GCODE_CASE_INSENSITIVE, WITHIN(c, 'a', 'z')))
       c += 'A' - 'a';
@@ -132,10 +133,10 @@ void GCodeParser::parse(char *p) {
   }
 
   // *p now points to the current command, which should be G, M, or T
-  command_ptr = p;
+  command_ptr = p;  //保存串口接收到的有效数据，保存到command_ptr
 
   // Get the command letter, which must be G, M, or T
-  const char letter = uppercase(*p++);
+  const char letter = uppercase(*p++);  // p -> M420 S1
 
   // Nullify asterisk and trailing whitespace
   char *starpos = strchr(p, '*');
@@ -229,7 +230,7 @@ void GCodeParser::parse(char *p) {
         }
       #endif
 
-      } break;
+    } break;
 
     #if ENABLED(GCODE_MOTION_MODES)
 
@@ -266,11 +267,11 @@ void GCodeParser::parse(char *p) {
   IF_DISABLED(FASTER_GCODE_PARSER, command_args = p); // Scan for parameters in seen()
 
   // Only use string_arg for these M codes
-  if (letter == 'M') switch (codenum) {
+  if (letter == 'M') switch (codenum) { //codenum = 420
     TERN_(GCODE_MACROS, case 810 ... 819:)
     TERN_(EXPECTED_PRINTER_CHECK, case 16:)
     case 23: case 28: case 30: case 117 ... 118: case 928:
-      string_arg = unescape_string(p);
+      string_arg = unescape_string(p);   // string_arg -> S1
       return;
     default: break;
   }
@@ -291,7 +292,7 @@ void GCodeParser::parse(char *p) {
     bool quoted_string_arg = false;
   #endif
   string_arg = nullptr;
-  while (const char param = uppercase(*p++)) {  // Get the next parameter. A NUL ends the loop
+  while (const char param = uppercase(*p++)) {  // Get the next parameter. A NUL ends the loop // P -> 1
 
     // Special handling for M32 [P] !/path/to/file.g#
     // The path must be the last parameter
@@ -324,9 +325,9 @@ void GCodeParser::parse(char *p) {
         const bool is_str = (*p == '"'), has_val = is_str || valid_float(p);
         char * const valptr = has_val ? is_str ? unescape_string(p) : p : nullptr;
       #else
-        const bool has_val = valid_float(p);
+        const bool has_val = valid_float(p);   //has_val = 1  Gcode的参数，判断参数的第一个字符是啥
         #if ENABLED(FASTER_GCODE_PARSER)
-          char * const valptr = has_val ? p : nullptr;
+          char * const valptr = has_val ? p : nullptr;  //valptr 为接收到参数的第一个数据地址
         #endif
       #endif
 
@@ -346,7 +347,7 @@ void GCodeParser::parse(char *p) {
 
       if (TERN0(DEBUG_GCODE_PARSER, debug)) SERIAL_EOL();
 
-      TERN_(FASTER_GCODE_PARSER, set(param, valptr)); // Set parameter exists and pointer (nullptr for no value)
+      TERN_(FASTER_GCODE_PARSER, set(param, valptr)); // Set parameter exists and pointer (nullptr for no value) param = 'M' ,valptr -> p 指向第一个数据的地址
     }
     else if (!string_arg) {                     // Not A-Z? First time, keep as the string_arg
       string_arg = p - 1;

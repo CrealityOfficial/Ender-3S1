@@ -66,7 +66,7 @@
  *  PWM duty cycle goes from 0 (off) to 255 (always on).
  */
 void GcodeSuite::M3_M4(const bool is_M4) {
-
+// SERIAL_ECHOPAIR("M3_M4\n");
   planner.synchronize();   // Wait for previous movement commands (G0/G1/G2/G3) to complete before changing power
   if (parser.seen('I')) {
     cutter.cutter_mode = is_M4 ? CUTTER_MODE_DYNAMIC : CUTTER_MODE_CONTINUOUS;

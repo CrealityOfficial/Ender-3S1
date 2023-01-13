@@ -77,6 +77,15 @@ void GcodeSuite::G92() {
           }
         }
         break;
+    #elif ENABLED(CREALITY_POWER_LOSS)
+      case 9:                                                         // G92.9 - Set Current Position directly (like Marlin 1.0)
+        LOOP_LOGICAL_AXES(i) {
+          if (parser.seenval(axis_codes[i])) {
+            if (i == E_AXIS) sync_E = true; else sync_XYZE = true;
+            current_position[i] = parser.value_axis_units((AxisEnum)i);
+          }
+        }
+        break;
     #endif
 
     case 0:

@@ -109,5 +109,8 @@ void GcodeSuite::M81() {
     PSU_OFF_SOON();
   #endif
 
+  // OUT_WRITE(SHUTIDOWN_PIN, LOW);
+  // delay(2000);
+
   LCD_MESSAGEPGM_P(PSTR(MACHINE_NAME " " STR_OFF "."));
 }

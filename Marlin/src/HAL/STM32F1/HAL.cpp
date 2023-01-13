@@ -177,7 +177,7 @@ const uint8_t adc_pins[] = {
   #if ENABLED(POWER_MONITOR_VOLTAGE)
     POWER_MONITOR_VOLTAGE_PIN,
   #endif
-  #ifdef CREALITY_ENDER3_2021//---------zy
+  #if ENABLED(CREALITY_POWER_LOSS)
     POWER_DETECTION_PIN,
   #endif
 };
@@ -240,7 +240,7 @@ enum TempPinIndex : char {
   #if ENABLED(POWER_MONITOR_VOLTAGE)
     POWERMON_VOLTS,
   #endif
-  #ifdef CREALITY_ENDER3_2021//---------zy
+  #if ENABLED(CREALITY_POWER_LOSS)
     POWER_CHECK,
   #endif
   ADC_PIN_COUNT
@@ -442,7 +442,7 @@ void HAL_adc_start_conversion(const uint8_t adc_pin) {
     #if ENABLED(POWER_MONITOR_VOLTAGE)
       case POWER_MONITOR_VOLTAGE_PIN: pin_index = POWERMON_VOLTS; break;
     #endif
-    #ifdef CREALITY_ENDER3_2021//---------zy
+    #if ENABLED(CREALITY_POWER_LOSS)
       case POWER_DETECTION_PIN: pin_index = POWER_CHECK; break;
     #endif
   }

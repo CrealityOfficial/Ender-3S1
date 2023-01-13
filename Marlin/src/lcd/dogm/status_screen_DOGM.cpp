@@ -775,6 +775,11 @@ void MarlinUI::draw_status_screen() {
             lcd_put_u8str(55, EXTRAS_BASELINE, progress_string); // Percent complete
             lcd_put_wchar('%');
           }
+          else
+          {
+            lcd_put_u8str(55, EXTRAS_BASELINE, 0); // Percent complete
+            lcd_put_wchar('%');
+          }
         #endif
 
         //

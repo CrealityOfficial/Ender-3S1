@@ -114,13 +114,11 @@
  * M42  - Change pin status via gcode: M42 P<pin> S<value>. LED pin assumed if P is omitted. (Requires DIRECT_PIN_CONTROL)
  * M43  - Display pin status, watch pins for changes, watch endstops & toggle LED, Z servo probe test, toggle pins
  * M48  - Measure Z Probe repeatability: M48 P<points> X<pos> Y<pos> V<level> E<engage> L<legs> S<chizoid>. (Requires Z_MIN_PROBE_REPEATABILITY_TEST)
- * M72  - Cloud print filename;
  * M73  - Set the progress percentage. (Requires LCD_SET_PROGRESS_MANUALLY)
  * M75  - Start the print job timer.
  * M76  - Pause the print job timer.
  * M77  - Stop the print job timer.
  * M78  - Show statistical information about the print jobs. (Requires PRINTCOUNTER)
- * M79  - Cloud print statistics.S0:cloud connect; S1:cloud print start; S2:cloud print pause; S3:cloud print resume; S4:cloud print stop; S5:cloud print complete
  * M80  - Turn on Power Supply. (Requires PSU_CONTROL)
  * M81  - Turn off Power Supply. (Requires PSU_CONTROL)
  * M82  - Set E codes absolute (default).
@@ -281,7 +279,6 @@
  * M916 - L6470 tuning: Increase KVAL_HOLD until thermal warning. (Requires at least one _DRIVER_TYPE L6470)
  * M917 - L6470 tuning: Find minimum current thresholds. (Requires at least one _DRIVER_TYPE L6470)
  * M918 - L6470 tuning: Increase speed until max or error. (Requires at least one _DRIVER_TYPE L6470)
- * M936 - OTA update firmware.
  * M951 - Set Magnetic Parking Extruder parameters. (Requires MAGNETIC_PARKING_EXTRUDER)
  * M7219 - Control Max7219 Matrix LEDs. (Requires MAX7219_GCODE)
  *
@@ -620,7 +617,7 @@ private:
   #if ENABLED(Z_MIN_PROBE_REPEATABILITY_TEST)
     static void M48();
   #endif
-  static void M72();  //rock_20211017
+
   #if ENABLED(LCD_SET_PROGRESS_MANUALLY)
     static void M73();
   #endif
@@ -632,7 +629,7 @@ private:
   #if ENABLED(PRINTCOUNTER)
     static void M78();
   #endif
-  static void M79();  //rock_20211017
+
   #if ENABLED(PSU_CONTROL)
     static void M80();
   #endif
@@ -1086,6 +1083,8 @@ private:
   #if ENABLED(POWER_LOSS_RECOVERY)
     static void M413();
     static void M1000();
+  #elif ENABLED(CREALITY_POWER_LOSS)
+    static void M413();
   #endif
 
   #if ENABLED(SDSUPPORT)
@@ -1107,7 +1106,6 @@ private:
   #if ENABLED(CONTROLLER_FAN_EDITABLE)
     static void M710();
   #endif
-static void M936();
 
   static void T(const int8_t tool_index);
 

@@ -244,6 +244,8 @@ typedef struct block_t {
 
   #if ENABLED(POWER_LOSS_RECOVERY)
     uint32_t sdpos;
+  #elif ENABLED(CREALITY_POWER_LOSS)
+    uint32_t sdpos;
   #endif
 
   #if ENABLED(LASER_FEATURE)
@@ -311,8 +313,7 @@ typedef struct {
   typedef IF<(BLOCK_BUFFER_SIZE > 64), uint16_t, uint8_t>::type last_move_t;
 #endif
 
-class Planner 
-{
+class Planner {
   public:
 
     /**

@@ -125,6 +125,8 @@ Stepper stepper; // Singleton
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if HAS_CUTTER
@@ -1797,12 +1799,12 @@ uint32_t Stepper::block_phase_isr() {
 
     // If current block is finished, reset pointer and finalize state
     if (step_events_completed >= step_event_count) {
-      #if HAS_CUTTER
-        if(laser_device.is_laser_device())
-        {
-          cutter.apply_power(0);
-        }
-      #endif
+      // #if HAS_CUTTER
+      //   if(laser_device.is_laser_device())
+      //   {
+      //     cutter.apply_power(0);
+      //   }
+      // #endif
 
       #if ENABLED(DIRECT_STEPPING)
         #if STEPPER_PAGE_FORMAT == SP_4x4D_128
@@ -1822,7 +1824,6 @@ uint32_t Stepper::block_phase_isr() {
       #endif
       TERN_(HAS_FILAMENT_RUNOUT_DISTANCE, runout.block_completed(current_block));
       discard_current_block();
-      
     }
     else {
       // Step events not completed yet...
@@ -2057,6 +2058,7 @@ uint32_t Stepper::block_phase_isr() {
       #endif
 
       TERN_(POWER_LOSS_RECOVERY, recovery.info.sdpos = current_block->sdpos);
+      TERN_(CREALITY_POWER_LOSS, pre01_power_loss.info.sdpos = current_block->sdpos);
 
       #if ENABLED(DIRECT_STEPPING)
         if (IS_PAGE(current_block)) {
@@ -2183,7 +2185,7 @@ uint32_t Stepper::block_phase_isr() {
       accelerate_until = current_block->accelerate_until << oversampling;
       decelerate_after = current_block->decelerate_after << oversampling;
 
-      TERN_(MIXING_EXTRUDER, mixer.stepper_setup(current_block->b_color));
+      TERN_(MIXING_EXTRUDER, mixer.stepper_setup(current_block->b_color))
 
       TERN_(HAS_MULTI_EXTRUDER, stepper_extruder = current_block->extruder);
 

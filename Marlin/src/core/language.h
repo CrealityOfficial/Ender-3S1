@@ -80,6 +80,7 @@
   #define SOURCE_CODE_URL DEFAULT_SOURCE_CODE_URL
 #endif
 
+
 #ifdef CUSTOM_MACHINE_NAME
   #undef  MACHINE_NAME
   #define MACHINE_NAME CUSTOM_MACHINE_NAME
@@ -92,7 +93,7 @@
   #define MACHINE_UUID DEFAULT_MACHINE_UUID
 #endif
 
-#define MARLIN_WEBSITE_URL "marlinfw.org"
+#define MARLIN_WEBSITE_URL "www.creality.com"
 
 //#if !defined(STRING_SPLASH_LINE3) && defined(WEBSITE_URL)
 //  #define STRING_SPLASH_LINE3 WEBSITE_URL
@@ -126,7 +127,7 @@
 #define STR_INVALID_E_STEPPER               "Invalid E stepper"
 #define STR_E_STEPPER_NOT_SPECIFIED         "E stepper not specified"
 #define STR_INVALID_SOLENOID                "Invalid solenoid"
-#define STR_M115_REPORT                     "FIRMWARE_NAME:"        FIRMWARE_VERSION     \
+#define STR_M115_DISABLE_REPORT             "FIRMWARE_NAME:"        FIRMWARE_VERSION     \
                                             " SOURCE_CODE_URL:"     SOURCE_CODE_URL      \
                                             " HARDWARE_VERSION:"    HARDWARE_VERSION     \
                                             " SCREEN_VERSION:"      SCREEN_VERSION       \
@@ -134,7 +135,18 @@
                                             " PROTOCOL_VERSION:"    PROTOCOL_VERSION     \
                                             " MACHINE_TYPE:"        MACHINE_NAME         \
                                             " EXTRUDER_COUNT:"      STRINGIFY(EXTRUDERS) \
-                                            " UUID:"                MACHINE_UUID
+                                            " UUID:"                MACHINE_UUID         \
+                                            " Cap:WIFI:"            STRINGIFY(0)
+#define STR_M115_ENABLE_REPORT              "FIRMWARE_NAME:"        FIRMWARE_VERSION     \
+                                            " SOURCE_CODE_URL:"     SOURCE_CODE_URL      \
+                                            " HARDWARE_VERSION:"    HARDWARE_VERSION     \
+                                            " SCREEN_VERSION:"      SCREEN_VERSION       \
+                                            " SCREEN_HW_VERSION:"   SCREEN_HW_VERSION    \
+                                            " PROTOCOL_VERSION:"    PROTOCOL_VERSION     \
+                                            " MACHINE_TYPE:"        MACHINE_NAME         \
+                                            " EXTRUDER_COUNT:"      STRINGIFY(EXTRUDERS) \
+                                            " UUID:"                MACHINE_UUID         \
+                                            " Cap:WIFI:"            STRINGIFY(1)
 #define STR_COUNT_X                         " Count X:"
 #define STR_COUNT_A                         " Count A:"
 #define STR_WATCHDOG_FIRED                  "Watchdog timeout. Reset required."

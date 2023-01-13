@@ -111,8 +111,6 @@ timer_dev* get_timer_dev(int number);
 #define STEP_TIMER_DEV TIMER_DEV(STEP_TIMER_NUM)
 #define TEMP_TIMER_DEV TIMER_DEV(TEMP_TIMER_NUM)
 
-
-
 #define ENABLE_STEPPER_DRIVER_INTERRUPT() timer_enable_irq(STEP_TIMER_DEV, STEP_TIMER_CHAN)
 #define DISABLE_STEPPER_DRIVER_INTERRUPT() timer_disable_irq(STEP_TIMER_DEV, STEP_TIMER_CHAN)
 #define STEPPER_ISR_ENABLED() HAL_timer_interrupt_enabled(STEP_TIMER_NUM)
@@ -199,7 +197,6 @@ FORCE_INLINE static void timer_no_ARR_preload_ARPE(timer_dev *dev) {
 }
 
 void timer_set_interrupt_priority(uint_fast8_t timer_num, uint_fast8_t priority);
-
 
 #define TIMER_OC_NO_PRELOAD 0 // Need to disable preload also on compare registers.
 

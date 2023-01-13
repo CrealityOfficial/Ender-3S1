@@ -56,12 +56,16 @@
   #include "../feature/host_actions.h"
 #endif
 
-#ifdef CREALITY_ENDER3_2021 //---------zy
-#include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
 #endif
 
-#if ENABLED(HAS_CUTTER)
-#include "../feature/spindle_laser.h"
+#if ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
+#endif
+
+#if HAS_CUTTER
+  #include "../feature/spindle_laser.h"
 #endif
 
 // LIB_MAX31855 can be added to the build_flags in platformio.ini to use a user-defined library
@@ -673,10 +677,22 @@ volatile bool Temperature::raw_temps_ready = false;
                 if (current_temp > watch_temp_target) heated = true;  // - Flag if target temperature reached
               }
               else if (ELAPSED(ms, temp_change_ms))                   // Watch timer expired
+              {
+                #if ENABLED(RTS_AVAILABLE)
+                  rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+                  change_page_font = 31;
+                #endif 
                 _temp_error(heater_id, str_t_heating_failed, GET_TEXT(MSG_HEATING_FAILED_LCD));
+              }
             }
             else if (current_temp < target - (MAX_OVERSHOOT_PID_AUTOTUNE)) // Heated, then temperature fell too far?
+            {
+              #if ENABLED(RTS_AVAILABLE)
+                rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+                change_page_font = 31;
+              #endif
               _temp_error(heater_id, str_t_thermal_runaway, GET_TEXT(MSG_THERMAL_RUNAWAY));
+            }
           }
         #endif
       } // every 2 seconds
@@ -688,6 +704,10 @@ volatile bool Temperature::raw_temps_ready = false;
       if ((ms - _MIN(t1, t2)) > (MAX_CYCLE_TIME_PID_AUTOTUNE * 60L * 1000L)) {
         TERN_(DWIN_CREALITY_LCD, DWIN_Popup_Temperature(0));
         TERN_(EXTENSIBLE_UI, ExtUI::onPidTuning(ExtUI::result_t::PID_TUNING_TIMEOUT));
+        #if ENABLED(RTS_AVAILABLE)
+          rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+          change_page_font = 31;
+        #endif
         SERIAL_ECHOLNPGM(STR_PID_TIMEOUT);
         break;
       }
@@ -749,6 +769,7 @@ volatile bool Temperature::raw_temps_ready = false;
 
       // Run UI update
       TERN(DWIN_CREALITY_LCD, DWIN_Update(), ui.update());
+      TERN(RTS_AVAILABLE, RTSUpdate(), ui.update());
     }
     wait_for_heatup = false;
 
@@ -767,7 +788,6 @@ volatile bool Temperature::raw_temps_ready = false;
 
 /**
  * Class and Instance Methods
- * 
  */
 
 int16_t Temperature::getHeaterPower(const heater_id_t heater_id) {
@@ -781,10 +801,6 @@ int16_t Temperature::getHeaterPower(const heater_id_t heater_id) {
     #if HAS_COOLER
       case H_COOLER: return temp_cooler.soft_pwm_amount;
     #endif
-    #if HAS_FAN
-       case H_FAN0:   return thermalManager.fan_speed[0];
-       case H_FAN1:   return thermalManager.fan_speed[0];//fan_on ? CHAMBER_AUTO_FAN_SPEED : 0
-    #endif  
     default:
       return TERN0(HAS_HOTEND, temp_hotend[heater_id].soft_pwm_amount);
   }
@@ -798,7 +814,7 @@ int16_t Temperature::getHeaterPower(const heater_id_t heater_id) {
 
   void Temperature::checkExtruderAutoFans() {
 
-    // 激光会被喉管风扇打断 107011 -20211014
+    // 激光会被喉管风扇打断
     #if HAS_CUTTER
       if(laser_device.is_laser_device()) return;
     #endif
@@ -963,12 +979,20 @@ void Temperature::max_temp_error(const heater_id_t heater_id) {
   #if ENABLED(DWIN_CREALITY_LCD) && (HAS_HOTEND || HAS_HEATED_BED)
     DWIN_Popup_Temperature(1);
   #endif
+  #if ENABLED(RTS_AVAILABLE) && (HAS_HOTEND || HAS_HEATED_BED)
+    rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+    change_page_font = 31;
+  #endif
   _temp_error(heater_id, PSTR(STR_T_MAXTEMP), GET_TEXT(MSG_ERR_MAXTEMP));
 }
 
 void Temperature::min_temp_error(const heater_id_t heater_id) {
   #if ENABLED(DWIN_CREALITY_LCD) && (HAS_HOTEND || HAS_HEATED_BED)
     DWIN_Popup_Temperature(0);
+  #endif
+  #if ENABLED(RTS_AVAILABLE) && (HAS_HOTEND || HAS_HEATED_BED)
+    rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+    change_page_font = 31;
   #endif
   _temp_error(heater_id, PSTR(STR_T_MINTEMP), GET_TEXT(MSG_ERR_MINTEMP));
 }
@@ -1249,7 +1273,14 @@ void Temperature::manage_heater() {
 
     HOTEND_LOOP() {
       #if ENABLED(THERMAL_PROTECTION_HOTENDS)
-        if (degHotend(e) > temp_range[e].maxtemp) max_temp_error((heater_id_t)e);
+        if (degHotend(e) > temp_range[e].maxtemp) 
+        {
+          #if ENABLED(RTS_AVAILABLE)
+            rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+            change_page_font = 31;
+          #endif
+          max_temp_error((heater_id_t)e);
+        }
       #endif
 
       TERN_(HEATER_IDLE_HANDLER, heater_idle[e].update(ms));
@@ -1268,6 +1299,10 @@ void Temperature::manage_heater() {
             start_watching_hotend(e);               // If temp reached, turn off elapsed check
           else {
             TERN_(DWIN_CREALITY_LCD, DWIN_Popup_Temperature(0));
+            #if ENABLED(RTS_AVAILABLE)
+              rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+              change_page_font = 31;
+            #endif
             _temp_error((heater_id_t)e, str_t_heating_failed, GET_TEXT(MSG_HEATING_FAILED_LCD));
           }
         }
@@ -1301,7 +1336,14 @@ void Temperature::manage_heater() {
   #if HAS_HEATED_BED
 
     #if ENABLED(THERMAL_PROTECTION_BED)
-      if (degBed() > BED_MAXTEMP) max_temp_error(H_BED);
+      if (degBed() > BED_MAXTEMP) 
+      {
+        #if ENABLED(RTS_AVAILABLE)
+          rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+          change_page_font = 31;
+        #endif
+        max_temp_error(H_BED);
+      }
     #endif
 
     #if WATCH_BED
@@ -1310,6 +1352,10 @@ void Temperature::manage_heater() {
         if (watch_bed.check(degBed()))          // Increased enough?
           start_watching_bed();                 // If temp reached, turn off elapsed check
         else {
+          #if ENABLED(RTS_AVAILABLE)
+            rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+            change_page_font = 31;
+          #endif
           TERN_(DWIN_CREALITY_LCD, DWIN_Popup_Temperature(0));
           _temp_error(H_BED, str_t_heating_failed, GET_TEXT(MSG_HEATING_FAILED_LCD));
         }
@@ -1563,10 +1609,9 @@ void Temperature::manage_heater() {
   #if ENABLED(LASER_COOLANT_FLOW_METER)
     cooler.flowmeter_task(ms);
     #if ENABLED(FLOWMETER_SAFETY)
-      if (cooler.check_flow_too_low()) {
-        if (cutter.enabled()) TERN_(HAS_DISPLAY, ui.flow_fault());
+      if (cutter.enabled() && cooler.check_flow_too_low()) {
         cutter.disable();
-        cutter.cutter_mode = CUTTER_MODE_ERROR;   // Immediately kill stepper inline power output
+        ui.flow_fault();
       }
     #endif
   #endif
@@ -2243,13 +2288,7 @@ void Temperature::init() {
   ENABLE_TEMPERATURE_INTERRUPT();
 
   #if HAS_AUTO_FAN_0
-    // #if HAS_CUTTER
-    //   if(laser_device.is_laser_device()){ //107011 -20210928
-    //  }else 
-    // #endif
-    {
-      INIT_E_AUTO_FAN_PIN(E0_AUTO_FAN_PIN);
-    }
+    INIT_E_AUTO_FAN_PIN(E0_AUTO_FAN_PIN);
   #endif
   #if HAS_AUTO_FAN_1 && !_EFANOVERLAP(1,0)
     INIT_E_AUTO_FAN_PIN(E1_AUTO_FAN_PIN);
@@ -2453,6 +2492,10 @@ void Temperature::init() {
         state = TRRunaway;
 
       case TRRunaway:
+        #if ENABLED(RTS_AVAILABLE)
+          rtscheck.RTS_SndData(ExchangePageBase + 31, ExchangepageAddr);
+          change_page_font = 31;
+        #endif
         TERN_(DWIN_CREALITY_LCD, DWIN_Popup_Temperature(0));
         _temp_error(heater_id, str_t_thermal_runaway, GET_TEXT(MSG_THERMAL_RUNAWAY));
     }
@@ -2498,7 +2541,7 @@ void Temperature::disable_all_heaters() {
   #endif
 }
 
-  #if ENABLED(PRINTJOB_TIMER_AUTOSTART)
+#if ENABLED(PRINTJOB_TIMER_AUTOSTART)
 
   #include "printcounter.h"
 
@@ -2863,7 +2906,7 @@ public:
 void Temperature::isr() {
 
   static int8_t temp_count = -1;
-  #ifdef CREALITY_ENDER3_2021 //---------zy
+  #if ENABLED(CREALITY_POWER_LOSS)
     static int8_t power_count = -1;
   #endif
   static ADCSensorState adc_sensor_state = StartupDelay;
@@ -3198,14 +3241,15 @@ void Temperature::isr() {
         temp_count = 0;
         readings_ready();
       }
-    #ifdef CREALITY_ENDER3_2021//---------zy
-      if (++power_count >= 1){
-          power_count = 0;
-          PRE01PowerLoss::GetInstance()->UpDateInfo()->update();
-          PRE01PowerLoss::GetInstance()->UpDateInfo()->reset();
-      }
+      #if ENABLED(CREALITY_POWER_LOSS)
+        if (++power_count >= 1){
+            power_count = 0;
+            PRE01PowerLoss::POWER_ADC_VALUE.update();
+            PRE01PowerLoss::POWER_ADC_VALUE.reset();
+        }
       #endif
       break;
+
     #if HAS_TEMP_ADC_0
       case PrepareTemp_0: HAL_START_ADC(TEMP_0_PIN); break;
       case MeasureTemp_0: ACCUMULATE_ADC(temp_hotend[0]); break;
@@ -3334,10 +3378,10 @@ void Temperature::isr() {
         if (ADCKey_count == ADC_BUTTON_DEBOUNCE_DELAY) ADCKey_pressed = true;
         break;
     #endif // HAS_ADC_BUTTONS
-    
-  #ifdef CREALITY_ENDER3_2021 //---------zy
+
+  #if ENABLED(CREALITY_POWER_LOSS)
       case Prepare_PowerCheck: HAL_START_ADC(POWER_DETECTION_PIN);break;
-      case Measure_PowerCheck: ACCUMULATE_ADC((*(PRE01PowerLoss::GetInstance()->UpDateInfo()))); break;
+      case Measure_PowerCheck: ACCUMULATE_ADC(PRE01PowerLoss::POWER_ADC_VALUE); break;
   #endif
     case StartupDelay: break;
 
@@ -3359,6 +3403,7 @@ void Temperature::isr() {
 
   // Periodically call the planner timer service routine
   planner.isr();
+
 }
 
 #if HAS_TEMP_SENSOR
@@ -3422,8 +3467,7 @@ void Temperature::isr() {
 
   void Temperature::print_heater_states(const uint8_t target_extruder
     OPTARG(TEMP_SENSOR_1_AS_REDUNDANT, const bool include_r/*=false*/)
-  ) 
-  {
+  ) {
     #if HAS_TEMP_HOTEND
       print_heater_state(H_NONE, degHotend(target_extruder), degTargetHotend(target_extruder) OPTARG(SHOW_TEMP_ADC_VALUES, rawHotendTemp(target_extruder)));
       #if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
@@ -3462,11 +3506,6 @@ void Temperature::isr() {
         SERIAL_ECHO(getHeaterPower((heater_id_t)e));
       }
     #endif
-    //风扇状态同步  
-    #if HAS_FAN
-      SERIAL_ECHOPAIR(" FAN0@:", getHeaterPower(H_FAN0));
-      SERIAL_ECHOPAIR(" FAN1@:", getHeaterPower(H_FAN1));
-    #endif    
   }
 
   #if ENABLED(AUTO_REPORT_TEMPERATURES)
@@ -3597,11 +3636,18 @@ void Temperature::isr() {
           }
         #endif
 
+        // 断电续打问题; 停止打印后关闭温度等待循环
+        if (card.flag.abort_sd_printing) wait_for_heatup = false;
+
       } while (wait_for_heatup && TEMP_CONDITIONS);
 
-      if (wait_for_heatup) 
-      {
+      if (wait_for_heatup) {
         wait_for_heatup = false;
+        #if ENABLED(RTS_AVAILABLE)
+          Update_Time_Value = RTS_UPDATE_VALUE;
+          rtscheck.RTS_SndData(ExchangePageBase + 10, ExchangepageAddr);
+        #endif
+
         #if ENABLED(DWIN_CREALITY_LCD)
           HMI_flag.heat_flag = 0;
           duration_t elapsed = print_job_timer.duration();  // print timer
@@ -3731,7 +3777,9 @@ void Temperature::isr() {
             ui.quick_feedback();
           }
         #endif
-
+        // 断电续打问题; 停止打印后关闭温度等待循环
+        if (card.flag.abort_sd_printing) wait_for_heatup = false;
+        
         #if TEMP_BED_RESIDENCY_TIME > 0
           first_loop = false;
         #endif

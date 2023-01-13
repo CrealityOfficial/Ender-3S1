@@ -52,7 +52,6 @@
 #if HAS_CUTTER
   #include "../../feature/spindle_laser.h"
 #endif
-
 /**
  * M104: Set Hotend Temperature target and return immediately
  * M109: Set Hotend Temperature target and wait
@@ -80,9 +79,9 @@
 void GcodeSuite::M104_M109(const bool isM109) {
 
   if (DEBUGGING(DRYRUN)) return;
-  
+
   #if HAS_CUTTER
-    if(laser_device.is_laser_device()) return; // 激光模式不加热 107011 -20211021
+    if (laser_device.is_laser_device()) return;
   #endif
 
   #if ENABLED(MIXING_EXTRUDER) && MIXING_VIRTUAL_TOOLS > 1

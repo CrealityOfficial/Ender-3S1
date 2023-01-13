@@ -126,10 +126,10 @@ public:
     }
 
     // Set the flag and pointer for a parameter
-    static inline void set(const char c, char * const ptr) {
+    static inline void set(const char c, char * const ptr) {  //ptr 接收到Gcode数据的参数指针 ptr = 1
       const uint8_t ind = LETTER_BIT(c);
       if (ind >= COUNT(param)) return;           // Only A-Z
-      SBI32(codebits, ind);                      // parameter exists
+      SBI32(codebits, ind);                      // parameter exists codebits 保存接收到参数信息
       param[ind] = ptr ? ptr - command_ptr : 0;  // parameter offset or 0
       #if ENABLED(DEBUG_GCODE_PARSER)
         if (codenum == 800) {
@@ -142,10 +142,10 @@ public:
 
     // Code seen bit was set. If not found, value_ptr is unchanged.
     // This allows "if (seen('A')||seen('B'))" to use the last-found value.
-    static inline bool seen(const char c) {
-      const uint8_t ind = LETTER_BIT(c);
-      if (ind >= COUNT(param)) return false; // Only A-Z
-      const bool b = TEST32(codebits, ind);
+    static inline bool seen(const char c) {  //M240 S1
+      const uint8_t ind = LETTER_BIT(c);   // 'S' - 'A' = 83 - 65 = 18
+      if (ind >= COUNT(param)) return false; // Only A-Z  //判断接收到字符为大写字符
+      const bool b = TEST32(codebits, ind);  // (codebits & (1 << 18))
       if (b) {
         if (param[ind]) {
           char * const ptr = command_ptr + param[ind];
@@ -275,8 +275,7 @@ public:
     }
     return 0;
   }
-// if 'command_ptr' contain target string or not (clh)
-  static inline bool str_contain(char* _str) { if(strstr(command_ptr, _str)) return true; else return false; }
+
   // Code value as a long or ulong
   static inline int32_t value_long() { return value_ptr ? strtol(value_ptr, nullptr, 10) : 0L; }
   static inline uint32_t value_ulong() { return value_ptr ? strtoul(value_ptr, nullptr, 10) : 0UL; }

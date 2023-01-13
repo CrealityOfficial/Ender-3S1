@@ -1174,7 +1174,6 @@ void MarlinUI::update() {
    * Read encoder buttons from the hardware registers
    * Warning: This function is called from interrupt context!
    */
-
   void MarlinUI::update_buttons() {
     const millis_t now = millis();
     if (ELAPSED(now, next_button_update_ms)) {
@@ -1184,23 +1183,14 @@ void MarlinUI::update() {
         #if ANY_BUTTON(EN1, EN2, ENC, BACK)
 
           uint8_t newbutton = 0;
-          if (BUTTON_PRESSED(EN1)) 
-          {
-              newbutton |= EN_A;
-              
-          }                
-          if (BUTTON_PRESSED(EN2)) 
-          {
-            newbutton |= EN_B;
-            
-          }                
+          if (BUTTON_PRESSED(EN1))                 newbutton |= EN_A;
+          if (BUTTON_PRESSED(EN2))                 newbutton |= EN_B;
           if (can_encode() && BUTTON_PRESSED(ENC)) 
           {
-             delay(20); // rock_20211209
+            delay(20);
             if(BUTTON_PRESSED(ENC))
             {
               newbutton |= EN_C;
-              
             }    
           }
           if (BUTTON_PRESSED(BACK))                newbutton |= EN_D;

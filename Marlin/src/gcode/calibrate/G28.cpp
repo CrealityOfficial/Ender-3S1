@@ -58,12 +58,21 @@
   #include "../../libs/L64XX/L64XX_Marlin.h"
 #endif
 
-#if ENABLED(LASER_FEATURE)
+#if ENABLED(LASER_MOVE_G28_OFF)
   #include "../../feature/spindle_laser.h"
+#endif
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../../lcd/dwin/lcd_rts.h"
 #endif
 
 #define DEBUG_OUT ENABLED(DEBUG_LEVELING_FEATURE)
 #include "../../core/debug_out.h"
+
+#if HAS_CUTTER
+  #include "../../feature/spindle_laser.h"
+#endif
+
 
 #if ENABLED(QUICK_HOME)
 
@@ -205,14 +214,11 @@
  *  Y   Home to the Y endstop
  *  Z   Home to the Z endstop
  */
-void GcodeSuite::G28() 
-{
+void GcodeSuite::G28() {
   DEBUG_SECTION(log_G28, "G28", DEBUGGING(LEVELING));
   if (DEBUGGING(LEVELING)) log_machine_info();
 
-  #if ENABLED(LASER_FEATURE)
-    planner.laser_inline.status.isPowered = false;
-  #endif
+  TERN_(LASER_MOVE_G28_OFF, cutter.set_inline_enabled(false));  // turn off laser
 
   TERN_(FULL_REPORT_TO_HOST_FEATURE, set_and_report_grblstate(M_HOMING));
 
@@ -238,6 +244,11 @@ void GcodeSuite::G28()
   }
 
   TERN_(DWIN_CREALITY_LCD, DWIN_StartHoming());
+
+  #if ENABLED(RTS_AVAILABLE)
+    home_flag = true;
+  #endif
+
   TERN_(EXTENSIBLE_UI, ExtUI::onHomingStart());
 
   planner.synchronize();          // Wait for planner moves to finish!
@@ -308,7 +319,6 @@ void GcodeSuite::G28()
 
   endstops.enable(true); // Enable endstops for next homing move
 
-
   #if ENABLED(DELTA)
 
     constexpr bool doZ = true; // for NANODLP_Z_SYNC if your DLP is on a DELTA
@@ -340,21 +350,19 @@ void GcodeSuite::G28()
 
     const float z_homing_height = parser.seenval('R') ? parser.value_linear_units() : Z_HOMING_HEIGHT;
 
-     if (z_homing_height && (doX || doY || TERN0(Z_SAFE_HOMING, doZ))) {
-      // Raise Z before homing any other axes and z is not already high enough (never lower z)
-      if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPAIR("Raise Z (before homing) by ", z_homing_height);
-
- 	//  //	107011 
-      #if HAS_CUTTER
-      if( laser_device.is_laser_device()) {
-
-      }else
-      #endif//#if HAS_CUTTER
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device())
       {
-          do_z_clearance(z_homing_height); 
+      }else
+    #endif
+      {
+        if (z_homing_height && (doX || doY || TERN0(Z_SAFE_HOMING, doZ))) {
+          // Raise Z before homing any other axes and z is not already high enough (never lower z)
+          if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPAIR("Raise Z (before homing) by ", z_homing_height);
+          do_z_clearance(z_homing_height);
           TERN_(BLTOUCH, bltouch.init());
+        }
       }
-    }
 
     #if ENABLED(QUICK_HOME)
 
@@ -384,7 +392,9 @@ void GcodeSuite::G28()
 
         // Consider the active extruder to be in its "parked" position
         idex_set_parked();
+
       #else
+
         homeaxis(X_AXIS);
 
       #endif
@@ -396,27 +406,19 @@ void GcodeSuite::G28()
 
     TERN_(IMPROVE_HOMING_RELIABILITY, end_slow_homing(slow_homing));
 
-  //107011-20210907
-  #if HAS_CUTTER
-	if( laser_device.is_laser_device()){ 
-  
-  }else
-  #endif //#if HAS_CUTTER
-  {
     // Home Z last if homing towards the bed
     #if DISABLED(HOME_Z_FIRST)
-
       if (doZ) {
         #if EITHER(Z_MULTI_ENDSTOPS, Z_STEPPER_AUTO_ALIGN)
           stepper.set_all_z_lock(false);
           stepper.set_separate_multi_axis(false);
         #endif
+
         TERN(Z_SAFE_HOMING, home_z_safely(), homeaxis(Z_AXIS));
         probe.move_z_after_homing();
       }
-
     #endif
-  }
+
     sync_plan_position();
 
   #endif
@@ -492,13 +494,23 @@ void GcodeSuite::G28()
   #endif
 
   ui.refresh();
+
   TERN_(DWIN_CREALITY_LCD, DWIN_CompletedHoming());
+  TERN_(RTS_AVAILABLE, RTS_MoveAxisHoming());
+  TERN_(RTS_AVAILABLE, rtscheck.RTS_SndData(0, MOTOR_FREE_ICON_VP));
+
+  #if ENABLED(RTS_AVAILABLE)
+    home_flag  = false;
+  //   home_count = true;
+  //   endstops.enable_z_probe(false);
+  #endif
+  
   TERN_(EXTENSIBLE_UI, ExtUI::onHomingComplete());
 
   report_current_position();
 
   
-   process_subcommands_now_P(PSTR("M420 S1")); //Enable automatic compensation function rock_2021.07.17
+  //process_subcommands_now_P(PSTR("M420 S1 Z2")); //Enable automatic compensation function rock_2021.07.17
 
   if (ENABLED(NANODLP_Z_SYNC) && (doZ || ENABLED(NANODLP_ALL_AXIS)))
     SERIAL_ECHOLNPGM(STR_Z_MOVE_COMP);
@@ -519,19 +531,4 @@ void GcodeSuite::G28()
       L64xxManager.set_param((L64XX_axis_t)cv, L6470_ABS_POS, stepper.position(L64XX_axis_xref[cv]));
     }
   #endif
-
-  #if ENABLED(LASER_FEATURE)
-    //107011-20211007
-    if(laser_device.is_laser_device()){
-      do_blocking_move_to_xy(0, 10, homing_feedrate(X_AXIS));
-      sync_plan_position();
-    }else
-  #endif
-  {
-    HMI_flag.power_back_to_zero_flag=true; //rock_21211104 ,防止在自动调平后再需要回零操作。
-    process_subcommands_now_P(PSTR("M420 S1")); //Enable automatic compensation function rock_2021.07.17
-  }
-
-
 }
-

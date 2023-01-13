@@ -69,12 +69,12 @@ extern const char M23_STR[], M24_STR[];
 typedef struct {
   bool saving:1,
        logging:1,
-       sdprinting:1, //打印中
-       sdprintdone:1, //打印完成
+       sdprinting:1,
+       sdprintdone:1,
        mounted:1,
        filenameIsDir:1,
        workDirIsRoot:1,
-       abort_sd_printing:1 //SD卡暂停打印
+       abort_sd_printing:1
        #if ENABLED(BINARY_FILE_TRANSFER)
          , binary_mode:1
        #endif
@@ -154,10 +154,10 @@ public:
   static void getAbsFilenameInCWD(char *dst);
   static void printSelectedFilename();
   static void openAndPrintFile(const char *name);   // (working directory or full path)
-  
+
   #if HAS_CUTTER 
-  //打开G-code文件，但是没有执行打印
-  static void openAndPausePrintFile(const char *name);
+    //打开G-code文件，但是没有执行打印
+    static void openAndPausePrintFile(const char *name);
   #endif
 
   static void startOrResumeFilePrinting();

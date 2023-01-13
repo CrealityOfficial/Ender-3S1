@@ -66,14 +66,110 @@
 //
 //===========================================================================
 
-// @section info
-
-// Author info of this build printed to the host during boot and M115
-#define STRING_CONFIG_H_AUTHOR "Creality" // Who made the changes.
-//#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
-
-// 自定义Z轴限位方式   rock_20220301
 #define Z_AXIS_LIMIT_MODE  0  //1 为Z轴限位开关  0 为 CRTouch
+
+
+// @section info
+/
+//  #define ENDER_3S1_PLUS
+#define ENDER_3S1_PRO
+  
+// 主控芯片
+#define USER_STM32F103  1
+// #define USER_STM32F401  1
+
+
+#if ENABLED(ENDER_3S1_PRO)
+
+  /**
+   * Release version. Leave the Marlin version or apply a custom scheme.
+   */
+  #ifndef SHORT_BUILD_VERSION
+    #if ENABLED(Z_AXIS_LIMIT_MODE)
+      #define SHORT_BUILD_VERSION "2.0.8.24Z" //F103版本
+    #elif ENABLED(USER_STM32F103)
+      #define SHORT_BUILD_VERSION "2.0.8.24F1" //F103版本
+    #elif ENABLED(USER_STM32F401)
+      #define SHORT_BUILD_VERSION "2.0.8.24F4" // F401版本
+
+    #endif
+    
+  #endif
+
+  // Author info of this build printed to the host during boot and M115
+  #define STRING_CONFIG_H_AUTHOR "Creality" // Who made the changes.
+  //#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
+  #define MACVERSION        STRING_CONFIG_H_AUTHOR
+  #define SOFTVERSION       SHORT_BUILD_VERSION
+  #define MACHINE_TYPE      "Ender-3 S1 Pro"
+  #define FIRMWARE_VERSION  "2.0.8"
+  #define SCREEN_VERSION    "UI20" 
+  #define SCREEN_HW_VERSION "DWIN2021"
+  #define HARDWARE_VERSION  "CR-FDM-v24S1_301"
+  #define PRINT_SIZE        "220 * 220 * 270"
+  #define CORP_WEBSITE_C    "www.cxsw3d.com  "
+  #define CORP_WEBSITE_E    "www.creality.com"
+#endif
+
+#if ENABLED(ENDER_3S1_PLUS)
+
+  /**
+   * Release version. Leave the Marlin version or apply a custom scheme.
+   */
+  #ifndef SHORT_BUILD_VERSION
+    #if ENABLED(Z_AXIS_LIMIT_MODE)
+      #define SHORT_BUILD_VERSION "2.0.8.24Z" //F103版本
+    #elif ENABLED(USER_STM32F103)
+      #define SHORT_BUILD_VERSION "2.0.8.24F1" //F103版本
+    #elif ENABLED(USER_STM32F401)
+      #define SHORT_BUILD_VERSION "2.0.8.24F4" // F401版本
+    #endif
+  #endif
+
+  // Author info of this build printed to the host during boot and M115
+  #define STRING_CONFIG_H_AUTHOR "Creality" // Who made the changes.
+  //#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
+  #define MACVERSION        STRING_CONFIG_H_AUTHOR
+  #define SOFTVERSION       SHORT_BUILD_VERSION
+  #define MACHINE_TYPE      "Ender-3 S1 Plus"
+  #define FIRMWARE_VERSION  "2.0.8"
+  #define SCREEN_VERSION    "UI20"
+  #define SCREEN_HW_VERSION "DWIN2021"
+  #define HARDWARE_VERSION  "CR-FDM-v24S1_301"
+  #define PRINT_SIZE        "300 * 300 * 300"
+  #define CORP_WEBSITE_C    "www.cxsw3d.com  "
+  #define CORP_WEBSITE_E    "www.creality.com"
+#endif
+
+#if ENABLED(ENDER_3S1)
+
+  /**
+   * Release version. Leave the Marlin version or apply a custom scheme.
+   */
+  #ifndef SHORT_BUILD_VERSION
+    #if ENABLED(USER_STM32F103)
+      #define SHORT_BUILD_VERSION "2.0.8.24F1" //F103版本
+    #elif ENABLED(USER_STM32F401)
+      #define SHORT_BUILD_VERSION "2.0.8.24F4" // F401版本
+    #endif
+    
+  #endif
+
+  // Author info of this build printed to the host during boot and M115
+  #define STRING_CONFIG_H_AUTHOR "Creality" // Who made the changes.
+  //#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
+  #define MACVERSION        STRING_CONFIG_H_AUTHOR
+  #define SOFTVERSION       SHORT_BUILD_VERSION
+  #define MACHINE_TYPE      "Ender-3 S1"
+  #define FIRMWARE_VERSION  "2.0.8"
+  #define SCREEN_VERSION    "UI20" 
+  #define SCREEN_HW_VERSION "DWIN2021"
+  #define HARDWARE_VERSION  "CR-FDM-v24S1_301"
+  #define PRINT_SIZE        "220 * 220 * 270"
+  #define CORP_WEBSITE_C    "www.cxsw3d.com  "
+  #define CORP_WEBSITE_E    "www.creality.com"
+#endif
+
 /**
  * *** VENDORS PLEASE READ ***
  *
@@ -86,12 +182,7 @@
  */
 
 // Show the Marlin bootscreen on startup. ** ENABLE FOR PRODUCTION **
-#if ENABLED(Z_AXIS_LIMIT_MODE)
 // #define SHOW_BOOTSCREEN
-#else
-  #define SHOW_BOOTSCREEN
-#endif
-
 
 // Show the bitmap in Marlin/_Bootscreen.h on startup.
 //#define SHOW_CUSTOM_BOOTSCREEN
@@ -130,8 +221,8 @@
  * Currently Ethernet (-2) is only supported on Teensy 4.1 boards.
  * :[-2, -1, 0, 1, 2, 3, 4, 5, 6, 7]
  */
-//#define SERIAL_PORT_2 -1
-//#define BAUDRATE_2 250000   // Enable to override BAUDRATE
+// #define SERIAL_PORT_2 2
+// #define BAUDRATE_2 115200   // Enable to override BAUDRATE
 
 /**
  * Select a third serial port on the board to use for communication with the host.
@@ -141,33 +232,40 @@
 //#define SERIAL_PORT_3 1
 //#define BAUDRATE_3 250000   // Enable to override BAUDRATE
 
+/**
+ * Select a third serial port on the board to use for communication with lcd.
+ * Currently only supported for AVR, DUE, LPC1768/9 and STM32/STM32F1
+ * :[-1, 0, 1, 2, 3, 4, 5, 6, 7]
+ */
+ #define LCD_SERIAL_PORT 2 
+ #define LCD_BAUDRATE 115200
+
 // Enable the Bluetooth serial interface on AT90USB devices
 //#define BLUETOOTH
 
-//Choose your mother board IC
-// #define STM32F401RC_creality
-#define STM32F103RET6_creality
-
 // Choose the name from boards.h that matches your setup
 #ifndef MOTHERBOARD
-  #ifdef STM32F103RET6_creality
+  #if ENABLED(USER_STM32F103)
     #define MOTHERBOARD BOARD_CREALITY_S1
-  #elif ENABLED(STM32F401RC_creality)
-    #define MOTHERBOARD BOARD_CREALITY_S1_F401RC
+  #elif ENABLED(USER_STM32F401)
+    #define MOTHERBOARD BOARD_CREALITY_S1_F401RC//MOTHERBOARD BOARD_CREALITY_S1//BOARD_CREALITY_S1_F401RC
   #endif
+  
 #endif
 
-// Release version
-#if ENABLED(Z_AXIS_LIMIT_MODE)
-#define SHORT_BUILD_VERSION "V3.0.3_Z"
-#else
-#define SHORT_BUILD_VERSION "V3.0.3"
+#if ENABLED(ENDER_3S1_Pro)
+  // Name displayed in the LCD "Ready" message and Info menu
+  #define CUSTOM_MACHINE_NAME "Ender-3 S1 Pro"
+#elif ENABLED(ENDER_3S1_PLUS)
+  // Name displayed in the LCD "Ready" message and Info menu
+  #define CUSTOM_MACHINE_NAME "Ender-3 S1 Plus"
+#elif  ENABLED(ENDER_3S1)
+  #define CUSTOM_MACHINE_NAME "Ender-3 S1"
 #endif
 
 
-// Name displayed in the LCD "Ready" message and Info menu
-#define CUSTOM_MACHINE_NAME "Ender-3 S1" 
-
+// #undef  MACHINE_NAME
+// #define MACHINE_NAME CUSTOM_MACHINE_NAME
 
 
 // Printer's unique ID, used by some programs to differentiate between machines.
@@ -192,16 +290,7 @@
   //#define SINGLENOZZLE_STANDBY_TEMP
   //#define SINGLENOZZLE_STANDBY_FAN
 #endif
-/*
-    Auto off display  
-    rock_20210728
-*/
-#define ENABLE_AUTO_OFF_DISPLAY
 
-#if ENABLED(ENABLE_AUTO_OFF_DISPLAY)
-  #define TURN_OFF_TIME              1000*60*5    //turn-off time: 30S
-  #define DESTORY_SCREEN_BRIGHTNESS  5          // brightness 0x00-0xff:0
-#endif
 /**
  * Multi-Material Unit
  * Set to one of these predefined models:
@@ -272,6 +361,7 @@
     #define MPE_COMPENSATION       0      // Offset Compensation -1 , 0 , 1 (multiplier) only for coupling
 
   #endif
+
 #endif
 
 /**
@@ -493,28 +583,24 @@
 #define TEMP_CHAMBER_RESIDENCY_TIME 10  // (seconds) Time to wait for chamber to "settle" in M191
 #define TEMP_CHAMBER_WINDOW          1  // (°C) Temperature proximity for the "temperature reached" timer
 #define TEMP_CHAMBER_HYSTERESIS      3  // (°C) Temperature proximity considered "close enough" to the target
-/*
-这段代码的意思是热床和碰头解决设定温度±3°并保持10秒以上则温度正常，开始打印
-*/
+
 // Below this temperature the heater will be switched off
 // because it probably indicates a broken thermistor wire.
-#define HEATER_0_MINTEMP   0//5
-#define HEATER_1_MINTEMP   0//5
-#define HEATER_2_MINTEMP   0//5
-#define HEATER_3_MINTEMP   0//5
-#define HEATER_4_MINTEMP   0//5
-#define HEATER_5_MINTEMP   0//5
-#define HEATER_6_MINTEMP   0//5
-#define HEATER_7_MINTEMP   0//5
-#define BED_MINTEMP        0//5
-#define CHAMBER_MINTEMP    0//5
-/*
-设置各个传感器检测最低温度保护，默认5°
-*/
+#define HEATER_0_MINTEMP   0
+#define HEATER_1_MINTEMP   5
+#define HEATER_2_MINTEMP   5
+#define HEATER_3_MINTEMP   5
+#define HEATER_4_MINTEMP   5
+#define HEATER_5_MINTEMP   5
+#define HEATER_6_MINTEMP   5
+#define HEATER_7_MINTEMP   5
+#define BED_MINTEMP        0
+#define CHAMBER_MINTEMP    5
+
 // Above this temperature the heater will be switched off.
 // This can protect components from overheating, but NOT from shorts and failures.
 // (Use MINTEMP for thermistor short/failure protection.)
-#define HEATER_0_MAXTEMP 275
+#define HEATER_0_MAXTEMP 320
 #define HEATER_1_MAXTEMP 275
 #define HEATER_2_MAXTEMP 275
 #define HEATER_3_MAXTEMP 275
@@ -522,7 +608,7 @@
 #define HEATER_5_MAXTEMP 275
 #define HEATER_6_MAXTEMP 275
 #define HEATER_7_MAXTEMP 275
-#define BED_MAXTEMP      110
+#define BED_MAXTEMP      160
 #define CHAMBER_MAXTEMP  60
 
 /**
@@ -542,32 +628,35 @@
 
 // Comment the following line to disable PID and enable bang-bang.
 #define PIDTEMP
-#define BANG_MAX  255    // Limits current to nozzle while in bang-bang mode; 255=full current
+#define BANG_MAX 255     // Limits current to nozzle while in bang-bang mode; 255=full current
 #define PID_MAX BANG_MAX // Limits current to nozzle while PID is active (see PID_FUNCTIONAL_RANGE below); 255=full current
 #define PID_K1 0.95      // Smoothing factor within any PID loop
 
 #if ENABLED(PIDTEMP)
   #define PID_EDIT_MENU         // Add PID editing to the "Advanced Settings" menu. (~700 bytes of PROGMEM)
   #define PID_AUTOTUNE_MENU     // Add PID auto-tuning to the "Advanced Settings" menu. (~250 bytes of PROGMEM)
-  //#define PID_PARAMS_PER_HOTEND // Uses separate PID parameters for each extruder (useful for mismatched extruders)
+  // #define PID_PARAMS_PER_HOTEND // Uses separate PID parameters for each extruder (useful for mismatched extruders)
                                   // Set/get with gcode: M301 E[extruder number, 0-2]
 
   #if ENABLED(PID_PARAMS_PER_HOTEND)
     // Specify between 1 and HOTENDS values per array.
     // If fewer than EXTRUDER values are provided, the last element will be repeated.
-    #define DEFAULT_Kp_LIST {  22.20,  22.20 }
-    #define DEFAULT_Ki_LIST {   1.08,   1.08 }
-    #define DEFAULT_Kd_LIST { 114.00, 114.00 }
+    #define DEFAULT_Kp_LIST {  14.49,  22.20 }
+    #define DEFAULT_Ki_LIST {   0.96,   1.08 }
+    #define DEFAULT_Kd_LIST { 54.59, 114.00 }
   #else
- 
-/*
+    // #define DEFAULT_Kp  22.20
+    // #define DEFAULT_Ki   1.08
+    // #define DEFAULT_Kd 114.00
+    //M303 C12 S200
+      /*Ender-3 max*/
+     // #define DEFAULT_Kp 10.42
+     // #define DEFAULT_Ki 0.5
+      //#define DEFAULT_Kd 53.18
+
       #define DEFAULT_Kp 14.49
       #define DEFAULT_Ki 0.96
       #define DEFAULT_Kd 54.59
-*/
-      #define DEFAULT_Kp 17.10
-      #define DEFAULT_Ki 1.39
-      #define DEFAULT_Kd 52.79
    #endif
 #endif // PIDTEMP
 
@@ -680,18 +769,15 @@
  */
 #define PREVENT_COLD_EXTRUSION
 #define EXTRUDE_MINTEMP 180
-/*
-低于170°，碰头将不会挤出，使用低温耗材的可以修改。
-*/
+
 /**
  * Prevent a single extrusion longer than EXTRUDE_MAXLENGTH.
  * Note: For Bowden Extruders make this large enough to allow load/unload.
  */
 #define PREVENT_LENGTHY_EXTRUDE
 #define EXTRUDE_MAXLENGTH 1000
-#define EXTRUDE_MAXLENGTH_e 999.9    //rock_20211122
 /*
-调试上料时，控制最大挤出长度为200mm，这个数值一般大于等于挤出机到喷头的耗材加载距离
+调试上料时，控制最大挤出长度为1000mm，这个数值一般大于等于挤出机到喷头的耗材加载距离
 */
 //===========================================================================
 //======================== Thermal Runaway Protection =======================
@@ -712,14 +798,8 @@
 
 #define THERMAL_PROTECTION_HOTENDS // Enable thermal protection for all extruders
 #define THERMAL_PROTECTION_BED     // Enable thermal protection for the heated bed
-#if ENABLED(Z_AXIS_LIMIT_MODE)
-  // #define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
-  // #define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
-#else
-  #define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
-  #define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
-#endif
-
+// #define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
+// #define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
 
 //===========================================================================
 //============================= Mechanical Settings =========================
@@ -754,8 +834,8 @@
 //#define USE_ZMAX_PLUG
 
 // Enable pullup for all endstops to prevent a floating state
-//#define ENDSTOPPULLUPS   //rock_20210728
-#if DISABLED(ENDSTOPPULLUPS)   
+//#define ENDSTOPPULLUPS
+#if DISABLED(ENDSTOPPULLUPS)
   // Disable ENDSTOPPULLUPS to set pullups individually
   //#define ENDSTOPPULLUP_XMAX
   //#define ENDSTOPPULLUP_YMAX
@@ -786,12 +866,12 @@
 #define X_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
 #define Y_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
 #define Z_MAX_ENDSTOP_INVERTING false // Set to true to invert the logic of the endstop.
+
 #if ENABLED(Z_AXIS_LIMIT_MODE)
     #define Z_MIN_PROBE_ENDSTOP_INVERTING true // Set to true to invert the logic of the probe.
 #else
     #define Z_MIN_PROBE_ENDSTOP_INVERTING false // Set to true to invert the logic of the probe.
 #endif
-
 
 /**
  * Stepper Drivers
@@ -874,17 +954,15 @@
  * Override with M92
  *                                      X, Y, Z, E0 [, E1[, E2...]]
  */
-//#define DEFAULT_AXIS_STEPS_PER_UNIT   {80,80,400,409.5}    //System Calculate data
-#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 400, 424.9}  //{ 80, 80, 400, 424.90} normal use
+#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 400, 424.9}
 
 /**
  * Default Max Feed Rate (mm/s)
  * Override with M203
  *                                      X, Y, Z, E0 [, E1[, E2...]]
  */
-//  #define DEFAULT_MAX_FEEDRATE          { 500, 500, 5, 25 }  //cr10smart_pro
-#define DEFAULT_MAX_FEEDRATE          { 300, 300, 5, 25 }   // 最大进给率
-/*在任何移动中，X,Y,Z和E方向上的速度（以毫米/秒为单位）将限制在相应的范围内*/
+#define DEFAULT_MAX_FEEDRATE          {300 , 300 , 5 , 25} //{ 3000, 3000, 60, 25 }   // 最大进给率
+
 #define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
   #define MAX_FEEDRATE_EDIT_VALUES    { 600, 600, 10, 50 } // ...or, set your own edit limits
@@ -897,14 +975,9 @@
  *                                      X, Y, Z, E0 [, E1[, E2...]]
  */
 #define DEFAULT_MAX_ACCELERATION      { 500, 500, 100, 1000 }  //加速度//{ 500, 500, 100, 1000 }  //加速度
-/*
-该设置是为了防止打印机丢步，一般保持默认。
-值3000意味着轴可以在一秒钟的运动中从0加速到3000mm/m（50mm/s）
-如果发现打印机抖动很厉害，可能是因为加速度过大的原因，可以将第二行中的前两个数值改为3000 3000.
-行的默认速度数值改为1000 1000 。
-*/
-// 屏蔽LIMITED_MAX_ACCEL_EDITING 使用DEFAULT_MAX_ACCELERATION 解决最大加速度界面Z轴不能大于100的bug 107011 -20211012 
-//#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2  rock_20211014
+
+
+#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
   #define MAX_ACCEL_EDIT_VALUES       { 3000, 3000, 100, 10000 } // ...or, set your own edit limits
 #endif
@@ -917,13 +990,10 @@
  *   M204 R    Retract Acceleration
  *   M204 T    Travel Acceleration
  */
+#define DEFAULT_ACCELERATION          500    // X, Y, Z and E acceleration for printing moves
+#define DEFAULT_RETRACT_ACCELERATION  800    // E acceleration for retracts
+#define DEFAULT_TRAVEL_ACCELERATION   1000    // X, Y, Z acceleration for travel (non printing) moves
 
-#define DEFAULT_ACCELERATION          500    // X, Y, Z and E acceleration for printing moves 出丝
-#define DEFAULT_RETRACT_ACCELERATION  800    // E acceleration for retracts  线材回抽
-#define DEFAULT_TRAVEL_ACCELERATION   1000    // X, Y, Z acceleration for travel (non printing) moves  不出丝
-/*
-默认最小速度
-*/
 /**
  * Default Jerk limits (mm/s)
  * Override with M205 X Y Z E
@@ -936,28 +1006,20 @@
 #if ENABLED(CLASSIC_JERK)
   #define DEFAULT_XJERK 5.0
   #define DEFAULT_YJERK 5.0
-  #define DEFAULT_ZJERK 0.3
-/*
-启动该设置可能会对模型转角的纹路优化（振纹）有所改善
-抖动和加速度一起配合工作。抖动指的是打印机在一瞬间可以发生的速度变化（以mm/s为单位）。也可以
-被认为是速度的最小变化，他将作为加速移动来完成。
+  #define DEFAULT_ZJERK  0.3
 
-加速度和加加速度都会影响打印质量。如果加加速度过低，挤出机会在小段和角落上停留太长时间，可能会留下斑点。
-如果加加速度设置的太高，方向变化将施加过大的扭矩，可能会看到振纹。
-*/
   //#define TRAVEL_EXTRA_XYJERK 0.0     // Additional jerk allowance for all travel moves
 
-  #define LIMITED_JERK_EDITING        // Limit edit via M205 or LCD to DEFAULT_aJERK * 2
+  //#define LIMITED_JERK_EDITING        // Limit edit via M205 or LCD to DEFAULT_aJERK * 2
   #if ENABLED(LIMITED_JERK_EDITING)
-    //#define MAX_JERK_EDIT_VALUES { 5, 5, 0.3, 3 } // ...or, set your own edit limits
-	 #define MAX_JERK_EDIT_VALUES { 10, 10, 0.6, 10 } // ...or, set your own edit limits
+    #define MAX_JERK_EDIT_VALUES { 20, 20, 0.6, 10 } // ...or, set your own edit limits
   #endif
 #endif
 
 #define DEFAULT_EJERK    5.0  // May be used by Linear Advance
 
 /**
- * Junction Deviation Factor409
+ * Junction Deviation Factor
  *
  * See:
  *   https://reprap.org/forum/read.php?1,739819
@@ -995,9 +1057,6 @@
  */
 #define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
 
-// Force the use of the probe for Z-axis homing
-//#define USE_PROBE_FOR_Z_HOMING
-
 /**
  * Z_MIN_PROBE_PIN
  *
@@ -1013,6 +1072,9 @@
  *      - normally-closed switches to GND and D32.
  *      - normally-open switches to 5V and D32.
  */
+/**
+ *Z_MIN_PROBE_PIN
+
 //#define Z_MIN_PROBE_PIN 32 // Pin 32 is the RAMPS default
 
 /**
@@ -1022,22 +1084,13 @@
  * Activate one of these to use Auto Bed Leveling below.
  */
 /**
- *探头类型
- *
- *Allen Key 探针、伺服探针、Z-Sled 探针、FIX_MOUNTED_PROBE 等。
- *激活其中之一以使用下面的自动床调平。
- */
+
 /**
  * The "Manual Probe" provides a means to do "Auto" Bed Leveling without a probe.
  * Use G29 repeatedly, adjusting the Z height at each point with movement commands
  * or (with LCD_BED_LEVELING) the LCD controller.
  */
-/**
- * 手动调平模式
- *“手动探头”提供了一种无需探头即可进行“自动”床调平的方法。
- *重复使用 G29，用移动指令调整每个点的 Z 高度
- *或（使用 LCD_BED_LEVELING）LCD 控制器。
- */ 
+
 //#define PROBE_MANUALLY
 
 /**
@@ -1055,12 +1108,11 @@
  *使用喷嘴作为探针，就像使用导电
  *喷嘴系统或压电智能效应器。
  */
-
 #if ENABLED(Z_AXIS_LIMIT_MODE)
     #define NOZZLE_AS_PROBE
 #else
     //#define NOZZLE_AS_PROBE
-#endif
+#endif 
 
 /**
  * Z Servo Probe, such as an endstop switch on a rotating arm.
@@ -1077,12 +1129,12 @@
 /**
  *BLTouch 探头使用霍尔效应传感器并模拟伺服。
  */ 
-
 #if ENABLED(Z_AXIS_LIMIT_MODE)
   //#define BLTOUCH
 #else
     #define BLTOUCH
 #endif
+
 /**
  * Touch-MI Probe by hotends.fr
  *
@@ -1173,22 +1225,26 @@
  *     |    [-]    |
  *     O-- FRONT --+
  */
-
 #if ENABLED(Z_AXIS_LIMIT_MODE)
 // #define NOZZLE_TO_PROBE_OFFSET { -40, -50, 0 }  //(-40,-60,0)
   #define NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }
 #else
-// #define NOZZLE_TO_PROBE_OFFSET { -40, -50, 0 }  //(-40,-60,0)
-#define NOZZLE_TO_PROBE_OFFSET { -31.8, -40.5, 0 }
+  #define NOZZLE_TO_PROBE_OFFSET { -40, -40, 0 }
 #endif
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.
-#define PROBING_MARGIN  3
+#define PROBING_MARGIN  10
 /*
-  探针距离打印边缘的余量，防止撞击
+探针距离打印边缘的余量，防止撞击
 */
 // X and Y axis travel speed (mm/min) between probes
-#define XY_PROBE_FEEDRATE (500*60)  //rock20211220 改变自动调平 X Y 轴移动的速度 （300-->500）
+#if ENABLED(ENDER_3S1_PLUS)
+  #define XY_PROBE_FEEDRATE (50*60) 
+#else
+  #define XY_PROBE_FEEDRATE (200*60)
+#endif
+
+
 /*
 这里代表的是每秒133mm
 */
@@ -1234,8 +1290,8 @@
  * A total of 2 does fast/slow probes with a weighted average.
  * A total of 3 or more adds more slow probes, taking the average.
  */
-#define MULTIPLE_PROBING 2    // Creality BLTouch Improve accuracy
-#define EXTRA_PROBING    1    // Creality BLTouch Improve accuracy
+#define MULTIPLE_PROBING 2
+#define EXTRA_PROBING    1
 
 /**
  * Z probes require clearance when deploying, stowing, and moving between
@@ -1251,7 +1307,7 @@
  * Example: `M851 Z-5` with a CLEARANCE of 4  =>  9mm from bed to nozzle.
  *     But: `M851 Z+1` with a CLEARANCE of 2  =>  2mm from bed to nozzle.
  */
-#define Z_CLEARANCE_DEPLOY_PROBE    10 // Z Clearance for Deploy/Stow
+#define Z_CLEARANCE_DEPLOY_PROBE   10 // Z Clearance for Deploy/Stow
 #define Z_CLEARANCE_BETWEEN_PROBES  5 // Z Clearance between probe points
 #define Z_CLEARANCE_MULTI_PROBE     5 // Z Clearance between multiple probes
 //#define Z_AFTER_PROBING           5 // Z position after probing is done
@@ -1260,11 +1316,10 @@
 
 // For M851 give a range for adjusting the Z probe offset
 #define Z_PROBE_OFFSET_RANGE_MIN -5 // -10   20210713_rock
-#define Z_AXIS_OFFSET_RANGE_MIN  0   //rock_20211025 修改轴移动界面不能移动到负值，防止撞击
 #define Z_PROBE_OFFSET_RANGE_MAX 10
 
 // Enable the M48 repeatability test to test probe accuracy
-#define Z_MIN_PROBE_REPEATABILITY_TEST
+//#define Z_MIN_PROBE_REPEATABILITY_TEST
 
 // Before deploy/stow pause for user confirmation
 //#define PAUSE_BEFORE_DEPLOY_STOW
@@ -1280,19 +1335,20 @@
  * readings with inductive probes and piezo sensors.
  探针时关闭加热：保证更精确的侧脸结果，防止电信号干扰
  */
-// #define PROBING_HEATERS_OFF       // Turn heaters off when probing
+//#define PROBING_HEATERS_OFF       // Turn heaters off when probing
 #if ENABLED(PROBING_HEATERS_OFF)
   #define WAIT_FOR_BED_HEATER     // Wait for bed to heat back up between probes (to improve accuracy)
   #define WAIT_FOR_HOTEND         // Wait for hotend to heat back up between probes (to improve accuracy & prevent cold extrude)
 #endif
-// #define PROBING_FANS_OFF          // Turn fans off when probing
-// #define PROBING_STEPPERS_OFF      // Turn steppers off (unless needed to hold position) when probing
-// #define DELAY_BEFORE_PROBING 200  // (ms) To prevent vibrations from triggering piezo sensors
+/*探针时还可以加一个延时和关闭风扇，进一步减少侧脸干扰。*/
+//#define PROBING_FANS_OFF          // Turn fans off when probing
+//#define PROBING_STEPPERS_OFF      // Turn steppers off (unless needed to hold position) when probing
+//#define DELAY_BEFORE_PROBING 200  // (ms) To prevent vibrations from triggering piezo sensors
 
 // Require minimum nozzle and/or bed temperature for probing
 //#define PREHEAT_BEFORE_PROBING
 #if ENABLED(PREHEAT_BEFORE_PROBING)
-  #define PROBING_NOZZLE_TEMP  120   // (°C) Only applies to E0 at this time
+  #define PROBING_NOZZLE_TEMP 120   // (°C) Only applies to E0 at this time
   #define PROBING_BED_TEMP     50
 #endif
 
@@ -1348,10 +1404,10 @@
  */
 //#define Z_IDLE_HEIGHT Z_HOME_POS
 
-#define Z_HOMING_HEIGHT  10    // (mm) Minimal Z height before homing (G28) for Z clearance above the bed, clamps, ...
+#define Z_HOMING_HEIGHT  5    // (mm) Minimal Z height before homing (G28) for Z clearance above the bed, clamps, ...
                                   // Be sure to have this much clearance over your Z_MAX_POS to prevent grinding.
 
-#define Z_AFTER_HOMING  10      // (mm) Height to move to after homing Z
+#define Z_AFTER_HOMING  0//10      // (mm) Height to move to after homing Z
 
 // Direction of endstops when homing; 1=MAX, -1=MIN
 // :[-1,1]
@@ -1359,19 +1415,52 @@
 #define Y_HOME_DIR -1
 #define Z_HOME_DIR -1
 
+//机器参数配置
 // @section machine
+#if ENABLED(ENDER_3S1_PRO)
 
 // The size of the printable area
 #define X_BED_SIZE 220
 #define Y_BED_SIZE 220
 
 // Travel limits (mm) after homing, corresponding to endstop positions.
-#define X_MIN_POS -10
-#define Y_MIN_POS -8  //-10  rock_20210713
+#define X_MIN_POS -9
+#define Y_MIN_POS -6
 #define Z_MIN_POS 0
-#define X_MAX_POS X_BED_SIZE+10 
+#define X_MAX_POS X_BED_SIZE
 #define Y_MAX_POS Y_BED_SIZE
-#define Z_MAX_POS 270       //250
+#define Z_MAX_POS 270
+#endif
+
+#if ENABLED(ENDER_3S1_PLUS)
+
+// The size of the printable area
+#define X_BED_SIZE 300
+#define Y_BED_SIZE 300
+
+// Travel limits (mm) after homing, corresponding to endstop positions.
+#define X_MIN_POS -6
+#define Y_MIN_POS -4
+#define Z_MIN_POS 0
+#define X_MAX_POS X_BED_SIZE
+#define Y_MAX_POS Y_BED_SIZE
+#define Z_MAX_POS 300
+#endif
+
+#if ENABLED(ENDER_3S1)
+
+// The size of the printable area
+#define X_BED_SIZE 220
+#define Y_BED_SIZE 220
+
+// Travel limits (mm) after homing, corresponding to endstop positions.
+#define X_MIN_POS -9
+#define Y_MIN_POS -6
+#define Z_MIN_POS 0
+#define X_MAX_POS X_BED_SIZE
+#define Y_MAX_POS Y_BED_SIZE
+#define Z_MAX_POS 270
+#endif
 
 /**
  * Software Endstops
@@ -1415,14 +1504,14 @@
  * RAMPS-based boards use SERVO3_PIN for the first runout sensor.
  * For other boards you may need to define FIL_RUNOUT_PIN, FIL_RUNOUT2_PIN, etc.
  */
- //#define FILAMENT_RUNOUT_SENSOR
+#define FILAMENT_RUNOUT_SENSOR
 #if ENABLED(FILAMENT_RUNOUT_SENSOR)
   #define FIL_RUNOUT_ENABLED_DEFAULT true // Enable the sensor on startup. Override with M412 followed by M500.
   #define NUM_RUNOUT_SENSORS   1          // Number of sensors, up to one per extruder. Define a FIL_RUNOUT#_PIN for each.
 
-  #define FIL_RUNOUT_STATE     LOW  //HIGH //      // Pin state indicating that filament is NOT present. 
-  //#define FIL_RUNOUT_PULLUP               // Use internal pullup for filament runout pins.
-  #define FIL_RUNOUT_PULLDOWN           // Use internal pulldown for filament runout pins.
+  #define FIL_RUNOUT_STATE     HIGH  //HIGH //      // Pin state indicating that filament is NOT present. 
+  #define FIL_RUNOUT_PULLUP               // Use internal pullup for filament runout pins.
+  // #define FIL_RUNOUT_PULLDOWN           // Use internal pulldown for filament runout pins.
   //#define WATCH_ALL_RUNOUT_SENSORS      // Execute runout script on any triggering sensor, not only for the active extruder.
                                           // This is automatically enabled for MIXING_EXTRUDERs.
 
@@ -1522,8 +1611,6 @@
 #else
 #define AUTO_BED_LEVELING_BILINEAR
 #endif
-
-
 //#define AUTO_BED_LEVELING_UBL
 //#define MESH_BED_LEVELING
 
@@ -1532,18 +1619,28 @@
  * these options to restore the prior leveling state or to always enable
  * leveling immediately after G28.
  */
+// #define RESTORE_LEVELING_AFTER_G28
 #if ENABLED(Z_AXIS_LIMIT_MODE)
 // #define RESTORE_LEVELING_AFTER_G28
 #else
 #define RESTORE_LEVELING_AFTER_G28
 #endif
 
-//#define ENABLE_LEVELING_AFTER_G28
+// 辅助调平点
+#if ENABLED(ENDER_3S1_PRO) 
+  //                                     X0,Y0    X1,Y1   X2,Y2  X3,Y3    X4 Y4
+  #define MANUALL_BED_LEVEING_5POSITION {110,110, 30,30, 190,30, 190,190, 30,190}
+#elif ENABLED(ENDER_3S1) 
+  #define MANUALL_BED_LEVEING_5POSITION {110,110, 30,30, 190,30, 190,190, 30,190}
+#elif ENABLED(ENDER_3S1_PLUS)
+  //                                     X0,Y0    X1,Y1   X2,Y2  X3,Y3    X4 Y4
+  #define MANUALL_BED_LEVEING_5POSITION {150,150, 30,30, 270,30, 270,270, 30,270}
+#endif
 
 /**
  * Auto-leveling needs preheating
  */
-//#define PREHEAT_BEFORE_LEVELING     // MRiscoC heatting to compensate thermal expansions  rock_901122
+//#define PREHEAT_BEFORE_LEVELING
 #if ENABLED(PREHEAT_BEFORE_LEVELING)
   #define LEVELING_NOZZLE_TEMP 120   // (°C) Only applies to E0 at this time
   #define LEVELING_BED_TEMP     50
@@ -1554,7 +1651,8 @@
  * Turn on with the command 'M111 S32'.
  * NOTE: Requires a lot of PROGMEM!
  */
-//#define DEBUG_LEVELING_FEATURE
+//zhang
+#define DEBUG_LEVELING_FEATURE
 
 #if ANY(MESH_BED_LEVELING, AUTO_BED_LEVELING_UBL, PROBE_MANUALLY)
   // Set a height for the start of manual adjustment
@@ -1583,10 +1681,10 @@
   #if ENABLED(G26_MESH_VALIDATION)
     #define MESH_TEST_NOZZLE_SIZE    0.4  // (mm) Diameter of primary nozzle.
     #define MESH_TEST_LAYER_HEIGHT   0.2  // (mm) Default layer height for G26.
-    #define MESH_TEST_HOTEND_TEMP  205    // (°C) Default nozzle temperature for G26.
-    #define MESH_TEST_BED_TEMP      60    // (°C) Default bed temperature for G26.
-    #define G26_XY_FEEDRATE         20    // (mm/s) Feedrate for G26 XY moves.
-    #define G26_XY_FEEDRATE_TRAVEL 100    // (mm/s) Feedrate for G26 XY travel moves.
+    #define MESH_TEST_HOTEND_TEMP    200    // (°C) Default nozzle temperature for G26.
+    #define MESH_TEST_BED_TEMP       60    // (°C) Default bed temperature for G26.
+    #define G26_XY_FEEDRATE          20    // (mm/s) Feedrate for G26 XY moves.
+    #define G26_XY_FEEDRATE_TRAVEL   100    // (mm/s) Feedrate for G26 XY travel moves.
     #define G26_RETRACT_MULTIPLIER   1.0  // G26 Q (retraction) used by default between mesh test elements.
   #endif
 
@@ -1614,7 +1712,7 @@
     #define ABL_BILINEAR_SUBDIVISION
     #if ENABLED(ABL_BILINEAR_SUBDIVISION)
       // Number of subdivisions between probe points
-      #define BILINEAR_SUBDIVISIONS 5
+      #define BILINEAR_SUBDIVISIONS 5//3
     #endif
 
   #endif
@@ -1843,37 +1941,6 @@
   #define EEPROM_AUTO_INIT  // Init EEPROM automatically on any errors.
 #endif
 
-#define EEPROM_PLR
-#if ENABLED(EEPROM_PLR)
-  #define PLR_ADDR 800
-#endif 
-
-#define EEPROM_DEMARCATE  //温度标定功能
-#if ENABLED(EEPROM_DEMARCATE)
-  #define DEMARCATE_ADDR 1900  //标定数据保存地址
-  #define DEMARCATE_NUMBER 4   //标定数据保存长度
-//温度标定的标准测试点
-  #define Tem_standard_10   10 
-  #define Tem_standard_25   25
-  #define Tem_standard_35   35
-  #define Tem_standard_40   40
-  #define Tem_standard_50   50
-
-//温度标定边界
-  #define Tem_compens_value_10   0 //10 
-  #define Tem_compens_value_25   20//25
-  #define Tem_compens_value_35   30//35
-  #define Tem_compens_value_40   45//40
-  #define Tem_compens_value_50   60//50
-#endif
-
-//#if HAS_CUTTER
-  #define  LASER_FDM_ADDR             1950
-  #define  LASER_Z_AXIS_HIGH_ADDR    1952 // 占用两字节
-//#endif
-
-
-
 //
 // Host Keepalive
 //
@@ -1898,18 +1965,33 @@
 
 //
 // Preheat Constants - Up to 5 are supported without changes
-//预设两个默认初始化参数默认是PLA和ABS的预设，串口屏不用设置这里。
-#define PREHEAT_1_LABEL       "PLA"
-#define PREHEAT_1_TEMP_HOTEND 200
-#define PREHEAT_1_TEMP_BED     60
-#define PREHEAT_1_TEMP_CHAMBER 35
-#define PREHEAT_1_FAN_SPEED    255 // Value from 0 to 255
+//
+// ender-3s1 plus 为低温版本
+#if ENABLED(ENDER_3S1_PLUS) || ENABLED(ENDER_3S1) 
+  #define PREHEAT_1_LABEL       "PLA"
+  #define PREHEAT_1_TEMP_HOTEND 200
+  #define PREHEAT_1_TEMP_BED     60
+  #define PREHEAT_1_TEMP_CHAMBER 35
+  #define PREHEAT_1_FAN_SPEED    255 // Value from 0 to 255
 
-#define PREHEAT_2_LABEL       "ABS"
-#define PREHEAT_2_TEMP_HOTEND 240
-#define PREHEAT_2_TEMP_BED    100
-#define PREHEAT_2_TEMP_CHAMBER 35
-#define PREHEAT_2_FAN_SPEED    255 // Value from 0 to 255
+  #define PREHEAT_2_LABEL       "ABS"
+  #define PREHEAT_2_TEMP_HOTEND 240
+  #define PREHEAT_2_TEMP_BED    100
+  #define PREHEAT_2_TEMP_CHAMBER 35
+  #define PREHEAT_2_FAN_SPEED    255 // Value from 0 to 255
+#else
+  #define PREHEAT_1_LABEL       "PLA"
+  #define PREHEAT_1_TEMP_HOTEND 200
+  #define PREHEAT_1_TEMP_BED     60
+  #define PREHEAT_1_TEMP_CHAMBER 35
+  #define PREHEAT_1_FAN_SPEED    255 // Value from 0 to 255
+
+  #define PREHEAT_2_LABEL       "ABS"
+  #define PREHEAT_2_TEMP_HOTEND 240
+  #define PREHEAT_2_TEMP_BED    110
+  #define PREHEAT_2_TEMP_CHAMBER 35
+  #define PREHEAT_2_FAN_SPEED    255 // Value from 0 to 255
+#endif
 
 /**
  * Nozzle Park
@@ -1936,6 +2018,13 @@
   #define NOZZLE_PARK_XY_FEEDRATE 100   // (mm/s) X and Y axes feedrate (also used for delta Z axis)
   #define NOZZLE_PARK_Z_FEEDRATE    5   // (mm/s) Z axis feedrate (not used for delta printers)
 #endif
+
+
+//#if HAS_CUTTER
+  #define  LASER_FDM_ADDR             1950
+  #define  LASER_Z_AXIS_HIGH_ADDR    1952 // 占用两字节
+//#endif
+
 
 /**
  * Clean Nozzle Feature -- EXPERIMENTAL
@@ -2511,7 +2600,7 @@
 // This is RAMPS-compatible using a single 10-pin connector.
 // (For CR-10 owners who want to replace the Melzi Creality board but retain the display)
 //
-//#define CR10_STOCKDISPLAY
+// #define CR10_STOCKDISPLAY
 
 //
 // Ender-2 OEM display, a variant of the MKS_MINI_12864
@@ -2791,9 +2880,17 @@
 //=============================================================================
 
 //
-// Ender-3S1 OEM display. A DWIN display with Rotary Encoder.
+// Ender-3 v2 OEM display. A DWIN display with Rotary Encoder.
 //
-#define DWIN_CREALITY_LCD
+// #define DWIN_CREALITY_LCD
+
+//
+// Creality V4.2.5 display. Creality board but retain the display.
+//
+#define RET6_12864_LCD
+
+// resistive touch screen
+#define RTS_AVAILABLE
 
 //
 // Touch Screen Settings
@@ -2970,7 +3067,5 @@
 // Edit servo angles with M281 and save to EEPROM with M500
 //#define EDITABLE_SERVO_ANGLES
 
-
-// #define CREALITY_POWER_TO_CONTINUE  
-//超级电容断电续打功能,如果取消此宏，默认是将断电续打数据保存到SD的PLR文件中，逐层覆盖
-//  #define CREALITY_ENDER3_2021   //Power to continue playing
+// menu key press reset wifi
+// #define HAS_MENU_RESET_WIFI

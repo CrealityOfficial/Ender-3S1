@@ -52,18 +52,43 @@ void Babystep::step_axis(const AxisEnum axis) {
 
 void Babystep::add_mm(const AxisEnum axis, const_float_t mm) {
   add_steps(axis, mm * planner.settings.axis_steps_per_mm[axis]);
+  // int16_t distance_count = mm * planner.settings.axis_steps_per_mm[axis];
+
+  // if(distance_count<0)
+  // {
+  //   if((-distance_count)%4)distance_count -= 1;
+  // }
+  // else 
+  // {
+  //   if(distance_count%4)distance_count += 1;
+  // }
+  // add_steps(axis,distance_count);
 }
 
 void Babystep::add_steps(const AxisEnum axis, const int16_t distance) {
   if (DISABLED(BABYSTEP_WITHOUT_HOMING) && axes_should_home(_BV(axis))) return;
-  // serialprintPGM("b:babystep\n");
-  serial_echopair_PGM("b:%d", (int)axis);
-  serial_echopair_PGM(",dis:%d\n", (int)distance);
+
   accum += distance; // Count up babysteps for the UI
   steps[BS_AXIS_IND(axis)] += distance;
   TERN_(BABYSTEP_DISPLAY_TOTAL, axis_total[BS_TOTAL_IND(axis)] += distance);
   TERN_(BABYSTEP_ALWAYS_AVAILABLE, gcode.reset_stepper_timeout());
   TERN_(INTEGRATED_BABYSTEPPING, if (has_steps()) stepper.initiateBabystepping());
 }
+
+// 激光模式时， 偏移调用
+#if HAS_CUTTER
+
+  void Babystep::add_mm_laser(const AxisEnum axis, const_float_t mm) {
+    add_steps_laser(axis, mm * planner.settings.axis_steps_per_mm[axis]);
+  }
+
+  void Babystep::add_steps_laser(const AxisEnum axis, const int16_t distance) {
+    accum += distance; // Count up babysteps for the UI
+    steps[BS_AXIS_IND(axis)] += distance;
+    TERN_(BABYSTEP_DISPLAY_TOTAL, axis_total[BS_TOTAL_IND(axis)] += distance);
+    TERN_(BABYSTEP_ALWAYS_AVAILABLE, gcode.reset_stepper_timeout());
+    TERN_(INTEGRATED_BABYSTEPPING, if (has_steps()) stepper.initiateBabystepping());
+}
+#endif
 
 #endif // BABYSTEPPING

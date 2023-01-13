@@ -38,7 +38,7 @@
   #include "../lcd/extui/ui_api.h"
 #endif
 
-//#define FILAMENT_RUNOUT_SENSOR_DEBUG
+// #define FILAMENT_RUNOUT_SENSOR_DEBUG
 #ifndef FILAMENT_RUNOUT_THRESHOLD
   #define FILAMENT_RUNOUT_THRESHOLD 5
 #endif
@@ -59,7 +59,7 @@ typedef TFilamentMonitor<
           TERN(FILAMENT_MOTION_SENSOR, FilamentSensorEncoder, FilamentSensorSwitch)
         > FilamentMonitor;
 
-extern FilamentMonitor runout;
+extern FilamentMonitor runout;  // TFilamentMonitor<RunoutResponseDebounced, FilamentSensorSwitch> runout;
 
 /*******************************************************************************************/
 
@@ -119,7 +119,7 @@ class TFilamentMonitor : public FilamentMonitorBase {
         TERN_(HAS_FILAMENT_RUNOUT_DISTANCE, cli()); // Prevent RunoutResponseDelayed::block_completed from accumulating here
         response.run();
         sensor.run();
-        const uint8_t runout_flags = response.has_run_out();
+        const uint8_t runout_flags = response.has_run_out();   //runout_flags = 1 runout_flags = 0 判断计数值是否已到
         TERN_(HAS_FILAMENT_RUNOUT_DISTANCE, sei());
         #if MULTI_FILAMENT_SENSOR
           #if ENABLED(WATCH_ALL_RUNOUT_SENSORS)
@@ -151,7 +151,7 @@ class TFilamentMonitor : public FilamentMonitorBase {
           }
         #endif
 
-        if (ran_out) {
+        if (ran_out) { 
           filament_ran_out = true;
           event_filament_runout(extruder);
           planner.synchronize();
@@ -161,6 +161,7 @@ class TFilamentMonitor : public FilamentMonitorBase {
 };
 
 /*************************** FILAMENT PRESENCE SENSORS ***************************/
+/***************************灯丝存在传感器 ****************************/
 
 class FilamentSensorBase {
   protected:
@@ -242,6 +243,10 @@ class FilamentSensorBase {
     }
 };
 
+/**
+*1、FilamentSensorEncoder ： 霍尔传感器检测耗材的大小，是否耗尽等状态信息；
+*2、FilamentSensorSwitch ：普通限位开关，输出高低电平，只能检测耗材是否耗尽
+ * */
 #if ENABLED(FILAMENT_MOTION_SENSOR)
 
   /**
@@ -249,6 +254,12 @@ class FilamentSensorBase {
    * sensor (or a slotted disc and optical sensor). The state
    * will toggle between 0 and 1 on filament movement. It can detect
    * filament runout and stripouts or jams.
+   */
+  /**
+   *该传感器使用磁性编码盘和霍尔效应
+   *传感器（或开槽圆盘和光学传感器）。国家
+   *将在灯丝移动时在 0 和 1 之间切换。它可以检测
+   *灯丝跳出和脱条或堵塞。
    */
   class FilamentSensorEncoder : public FilamentSensorBase {
     private:
@@ -292,6 +303,10 @@ class FilamentSensorBase {
    * This is a simple endstop switch in the path of the filament.
    * It can detect filament runout, but not stripouts or jams.
    */
+  /**
+   *这是灯丝路径中的一个简单的限位开关。
+   *它可以检测耗材跳动，但不能检测脱线或卡纸。
+   */ 
   class FilamentSensorSwitch : public FilamentSensorBase {
     private:
       static inline bool poll_runout_state(const uint8_t extruder) {
@@ -312,11 +327,11 @@ class FilamentSensorBase {
       static inline void run() {
         LOOP_L_N(s, NUM_RUNOUT_SENSORS) {
           const bool out = poll_runout_state(s);
-          if (!out) filament_present(s);
+          if (!out) filament_present(s);   //如果检测到耗材已用尽,则判断是否满足最大检测数目
           #if ENABLED(FILAMENT_RUNOUT_SENSOR_DEBUG)
             static uint8_t was_out; // = 0
             if (out != TEST(was_out, s)) {
-              TBI(was_out, s);
+              TBI(was_out, s);  //s is the number of filement sensor; out represent filement sensor status;
               SERIAL_ECHOLNPAIR_P(PSTR("Filament Sensor "), '0' + s, out ? PSTR(" OUT") : PSTR(" IN"));
             }
           #endif
@@ -327,13 +342,20 @@ class FilamentSensorBase {
 
 #endif // !FILAMENT_MOTION_SENSOR
 
-/********************************* RESPONSE TYPE *********************************/
+/**
+ * 1、RunoutResponseDelayed ： 检测到断料开关触发后，继续打印设定的距离则执行暂停打印的动作
+ * 2、RunoutResponseDebounced ：检测到断料开关触发后，运行FILAMENT_RUNOUT_THRESHOLD的次数后执行暂停打印的操作
+ * */
 
 #if HAS_FILAMENT_RUNOUT_DISTANCE
 
   // RunoutResponseDelayed triggers a runout event only if the length
   // of filament specified by FILAMENT_RUNOUT_DISTANCE_MM has been fed
   // during a runout condition.
+
+  //RunoutResponseDelayed 仅在长度为
+  //FILAMENT_RUNOUT_DISTANCE_MM 指定的细丝已送入
+  //在跳动条件下。 
   class RunoutResponseDelayed {
     private:
       static volatile float runout_mm_countdown[NUM_RUNOUT_SENSORS];
@@ -382,7 +404,8 @@ class FilamentSensorBase {
 
   // RunoutResponseDebounced triggers a runout event after a runout
   // condition has been detected runout_threshold times in a row.
-
+//RunoutResponseDebounced 在runout后触发runout事件
+  //条件已连续检测到 runout_threshold 次。
   class RunoutResponseDebounced {
     private:
       static constexpr int8_t runout_threshold = FILAMENT_RUNOUT_THRESHOLD;

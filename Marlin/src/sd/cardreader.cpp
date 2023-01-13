@@ -47,10 +47,16 @@
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if ENABLED(ADVANCED_PAUSE_FEATURE)
   #include "../feature/pause.h"
+#endif
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
 #endif
 
 #define DEBUG_OUT EITHER(DEBUG_CARDREADER, MARLIN_DEV_MODE)
@@ -480,6 +486,8 @@ void CardReader::manage_media() {
         DEBUG_ECHOLNPGM("First mount.");
         #if ENABLED(POWER_LOSS_RECOVERY)
           recovery.check();           // Check for PLR file. (If not there then call autofile_begin)
+        #elif ENABLED(CREALITY_POWER_LOSS)
+          pre01_power_loss.check();
         #elif DISABLED(NO_SD_AUTOSTART)
           autofile_begin();           // Look for auto0.g on the next loop
         #endif
@@ -531,6 +539,7 @@ void CardReader::openAndPausePrintFile(const char *name) {
   queue.inject(cmd);
 }
 #endif // #if HAS_CUTTER
+
 
 /**
  * Start or resume a media print by setting the sdprinting flag.
@@ -815,7 +824,7 @@ void CardReader::write_command(char * const buf) {
       settings.first_load();
 
     // Don't run auto#.g when a PLR file exists
-    if (isMounted() && TERN1(POWER_LOSS_RECOVERY, !recovery.valid())) {
+    if (isMounted() && (TERN1(POWER_LOSS_RECOVERY, !recovery.valid()) | TERN1(CREALITY_POWER_LOSS, !pre01_power_loss.valid()))) {
       char autoname[10];
       sprintf_P(autoname, PSTR("/auto%c.g"), '0' + autofile_index - 1);
       if (fileExists(autoname)) {

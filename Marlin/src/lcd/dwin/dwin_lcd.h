@@ -52,7 +52,7 @@ void DWIN_Startup(void);
 
 // Set the backlight luminance
 //  luminance: (0x00-0xFF)
-extern void DWIN_Backlight_SetLuminance(const uint8_t luminance);
+void DWIN_Backlight_SetLuminance(const uint8_t luminance);
 
 // Set screen display direction
 //  dir: 0=0°, 1=90°, 2=180°, 3=270°

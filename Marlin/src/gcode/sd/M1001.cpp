@@ -33,14 +33,14 @@
   #include "../queue.h"
 #endif
 
-#include "../../libs/BL24CXX.h"  //Marlin\src\libs\BL24CXX.h rock_20210812
-
 #if EITHER(LCD_SET_PROGRESS_MANUALLY, SD_REPRINT_LAST_SELECTED_FILE)
   #include "../../lcd/marlinui.h"
 #endif
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if HAS_LEDS_OFF_FLAG
@@ -56,12 +56,16 @@
   #include "../../feature/host_actions.h"
 #endif
 
-#ifndef PE_LEDS_COMPLETED_TIME
-  #define PE_LEDS_COMPLETED_TIME (30*60)
-#endif
-
 #if HAS_CUTTER
   #include "../../feature/spindle_laser.h"
+#endif
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../../lcd/dwin/lcd_rts.h"
+#endif
+
+#ifndef PE_LEDS_COMPLETED_TIME
+  #define PE_LEDS_COMPLETED_TIME (30*60)
 #endif
 
 /**
@@ -69,20 +73,21 @@
  */
 void GcodeSuite::M1001() {
   planner.synchronize();
+
   // SD Printing is finished when the queue reaches M1001
   card.flag.sdprinting = card.flag.sdprintdone = false;
-  recovery.info.sd_printing_flag = false; //rock_20210819
+
   // If there's another auto#.g file to run...
   if (TERN(NO_SD_AUTOSTART, false, card.autofile_check())) return;
 
   // Purge the recovery file...
   TERN_(POWER_LOSS_RECOVERY, recovery.purge());
+  TERN_(CREALITY_POWER_LOSS, pre01_power_loss.purge());
 
-  // Report total print time 
+  // Report total print time
   const bool long_print = print_job_timer.duration() > 60;
   if (long_print) gcode.process_subcommands_now_P(PSTR("M31"));
- 
-  // Stop the print job timer 停止打印作业计时器
+  // Stop the print job timer
   gcode.process_subcommands_now_P(PSTR("M77"));
 
   // Set the progress bar "done" state
@@ -105,27 +110,31 @@ void GcodeSuite::M1001() {
     }
   #endif
 
-  //修改激光打印结束为回原点 107011 -20211108
-  #if HAS_CUTTER
-    if(laser_device.is_laser_device())
-    {
-      #ifdef SD_FINISHED_RELEASECOMMAND_LASER
-        gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND_LASER));
-      #endif
-    }else
-  #endif
-  {
-    // Inject SD_FINISHED_RELEASECOMMAND, if any
-    #ifdef SD_FINISHED_RELEASECOMMAND
-      gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND));
+  // Inject SD_FINISHED_RELEASECOMMAND, if any
+  #ifdef SD_FINISHED_RELEASECOMMAND
+    #if HAS_CUTTER
+      if(laser_device.is_laser_device())
+      {  
+      }else
     #endif
-  }
+    {
+      gcode.process_subcommands_now_P(PSTR(SD_FINISHED_RELEASECOMMAND));
+    }
+  #endif
+
   TERN_(EXTENSIBLE_UI, ExtUI::onPrintFinished());
 
   // Re-select the last printed file in the UI
   TERN_(SD_REPRINT_LAST_SELECTED_FILE, ui.reselect_last_file());
-  BL24CXX::EEPROM_Reset(PLR_ADDR, (uint8_t*)&recovery.info, sizeof(recovery.info));//rock_20210812  清空 EEPROM
-  
+
+  // 激光雕刻结束
+  #if HAS_CUTTER
+    if(laser_device.is_laser_device()){ 
+      rtscheck.RTS_SndData(ExchangePageBase + 60, ExchangepageAddr);
+      change_page_font = 60;
+    }
+  #endif
+
 }
 
 #endif // SDSUPPORT

@@ -78,6 +78,7 @@ class MarlinSettings {
       #endif
 
     #else // !EEPROM_SETTINGS
+
       FORCE_INLINE
       static bool load() { reset(); report(); return true; }
       FORCE_INLINE

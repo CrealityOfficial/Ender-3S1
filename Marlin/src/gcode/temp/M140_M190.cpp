@@ -37,7 +37,6 @@
 #if HAS_CUTTER
   #include "../../feature/spindle_laser.h"
 #endif
-
 /**
  * M140 - Set Bed Temperature target and return immediately
  * M190 - Set Bed Temperature target and wait
@@ -62,11 +61,9 @@
 void GcodeSuite::M140_M190(const bool isM190) {
 
   if (DEBUGGING(DRYRUN)) return;
-
   #if HAS_CUTTER
-    if(laser_device.is_laser_device()) return; // 激光模式不加热 107011 -20211021
+    if (laser_device.is_laser_device()) return;
   #endif
-
   bool got_temp = false;
   celsius_t temp = 0;
 

@@ -32,13 +32,13 @@
 
 #if ENABLED(DWIN_CREALITY_LCD)
 
-#include "../../inc/MarlinConfig.h" 
+#include "../../inc/MarlinConfig.h"
 
 #include "dwin_lcd.h"
 #include <string.h> // for memset
 
 //#define DEBUG_OUT 1
-#include "../../core/debug_out.h"  
+#include "../../core/debug_out.h"
 
 // Make sure DWIN_SendBuf is large enough to hold the largest string plus draw command and tail.
 // Assume the narrowest (6 pixel) font and 2-byte gb2312-encoded characters.
@@ -124,11 +124,10 @@ bool DWIN_Handshake(void) {
 
 // Set the backlight luminance
 //  luminance: (0x00-0xFF)
-void DWIN_Backlight_SetLuminance(const uint8_t luminance) 
-{
+void DWIN_Backlight_SetLuminance(const uint8_t luminance) {
   size_t i = 0;
   DWIN_Byte(i, 0x30);
-  DWIN_Byte(i, luminance); //_MAX(luminance, 0x1F));
+  DWIN_Byte(i, _MAX(luminance, 0x1F));
   DWIN_Send(i);
 }
 
@@ -148,8 +147,8 @@ void DWIN_UpdateLCD(void) {
   size_t i = 0;
   DWIN_Byte(i, 0x3D);
   DWIN_Send(i);
- // SERIAL_ECHOLNPGM("The detection of break:");
- // SERIAL_PRINT(READ(CHECKFILAMENT_PIN), PrintBase::Hex);
+  // SERIAL_ECHOLNPGM("The detection of break:");
+  // SERIAL_PRINT(READ(CHECKFILAMENT_PIN), PrintBase::Hex);
   //SERIAL_PRINT(READ(CHECKFILAMENT_PIN), HEX);
 }
 

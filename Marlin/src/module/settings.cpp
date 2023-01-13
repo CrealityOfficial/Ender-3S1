@@ -87,6 +87,8 @@
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if HAS_POWER_MONITOR
@@ -156,6 +158,10 @@
 #if ENABLED(DGUS_LCD_UI_MKS)
   #include "../lcd/extui/dgus/DGUSScreenHandler.h"
   #include "../lcd/extui/dgus/DGUSDisplayDef.h"
+#endif
+
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
 #endif
 
 #pragma pack(push, 1) // No padding between variables
@@ -435,6 +441,10 @@ typedef struct SettingsDataStruct {
     uint8_t caselight_brightness;                        // M355 P
   #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  uint8_t language_change_font;
+#endif
+
   //
   // PASSWORD_FEATURE
   //
@@ -479,7 +489,6 @@ typedef struct SettingsDataStruct {
   #if HAS_MULTI_LANGUAGE
     uint8_t ui_language;                                // M414 S
   #endif
-
 
 } SettingsData;
 
@@ -803,11 +812,7 @@ void MarlinSettings::postprocess() {
     //
     {
       _FIELD_TEST(planner_leveling_active);
-      #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
-        const bool ubl_active = planner.leveling_active;
-      #else
         const bool ubl_active = TERN(AUTO_BED_LEVELING_UBL, planner.leveling_active, false);
-      #endif
       const int8_t storage_slot = TERN(AUTO_BED_LEVELING_UBL, ubl.storage_slot, -1);
       EEPROM_WRITE(ubl_active);
       EEPROM_WRITE(storage_slot);
@@ -1025,7 +1030,11 @@ void MarlinSettings::postprocess() {
     //
     {
       _FIELD_TEST(recovery_enabled);
-      const bool recovery_enabled = TERN(POWER_LOSS_RECOVERY, recovery.enabled, ENABLED(PLR_ENABLED_DEFAULT));
+      #if ENABLED(POWER_LOSS_RECOVERY)
+        const bool recovery_enabled = TERN(POWER_LOSS_RECOVERY, recovery.enabled, ENABLED(PLR_ENABLED_DEFAULT));
+      #elif ENABLED(CREALITY_POWER_LOSS)
+        const bool recovery_enabled = TERN(CREALITY_POWER_LOSS, pre01_power_loss.enabled, ENABLED(PLR_ENABLED_DEFAULT));
+      #endif
       EEPROM_WRITE(recovery_enabled);
     }
 
@@ -1305,7 +1314,6 @@ void MarlinSettings::postprocess() {
         EEPROM_WRITE(no_current);
       #endif
     }
-
     //
     // CNC Coordinate Systems
     //
@@ -1386,6 +1394,10 @@ void MarlinSettings::postprocess() {
       EEPROM_WRITE(caselight.brightness);
     #endif
 
+    #if ENABLED(RTS_AVAILABLE)
+        EEPROM_WRITE(language_change_font);
+    #endif
+
     //
     // Password feature
     //
@@ -1443,7 +1455,6 @@ void MarlinSettings::postprocess() {
     #if HAS_MULTI_LANGUAGE
       EEPROM_WRITE(ui.language);
     #endif
-    
 
     //
     // Report final CRC and Data Size
@@ -1457,7 +1468,7 @@ void MarlinSettings::postprocess() {
 
       EEPROM_WRITE(version);
       EEPROM_WRITE(final_crc);
-    
+
       // Report storage size
       DEBUG_ECHO_MSG("Settings Stored (", eeprom_size, " bytes; crc ", (uint32_t)final_crc, ")");
 
@@ -1686,9 +1697,6 @@ void MarlinSettings::postprocess() {
         #if ENABLED(AUTO_BED_LEVELING_UBL)
           const bool &planner_leveling_active = planner.leveling_active;
           const int8_t &ubl_storage_slot = ubl.storage_slot;
-        #elif ENABLED(AUTO_BED_LEVELING_BILINEAR)
-          const bool &planner_leveling_active = planner.leveling_active;
-          int8_t ubl_storage_slot;
         #else
           bool planner_leveling_active;
           int8_t ubl_storage_slot;
@@ -1910,6 +1918,8 @@ void MarlinSettings::postprocess() {
         _FIELD_TEST(recovery_enabled);
         #if ENABLED(POWER_LOSS_RECOVERY)
           const bool &recovery_enabled = recovery.enabled;
+        #elif ENABLED(CREALITY_POWER_LOSS)
+          const bool &recovery_enabled = pre01_power_loss.enabled;
         #else
           bool recovery_enabled;
         #endif
@@ -2305,6 +2315,23 @@ void MarlinSettings::postprocess() {
         EEPROM_READ(caselight.brightness);
       #endif
 
+      #if ENABLED(RTS_AVAILABLE)
+        EEPROM_READ(language_change_font);
+        if((language_change_font != 1) &&
+          (language_change_font != 2) &&
+          (language_change_font != 3) &&
+          (language_change_font != 4) &&
+          (language_change_font != 5) &&
+          (language_change_font != 6) &&
+          (language_change_font != 7) &&
+          (language_change_font != 8) &&
+          (language_change_font != 9))
+        {
+          language_change_font = 2;
+        }
+        
+
+      #endif
       //
       // Password feature
       //
@@ -2418,7 +2445,6 @@ void MarlinSettings::postprocess() {
           }
         }
       #endif
-
     }
 
     #if ENABLED(EEPROM_CHITCHAT) && DISABLED(DISABLE_M503)
@@ -2452,7 +2478,6 @@ void MarlinSettings::postprocess() {
 
   bool MarlinSettings::load() {
     if (validate()) {
-
       const bool success = _load();
       TERN_(EXTENSIBLE_UI, ExtUI::onConfigurationStoreRead(success));
       return success;
@@ -2691,6 +2716,10 @@ void MarlinSettings::reset() {
   //
   TERN_(CASELIGHT_USES_BRIGHTNESS, caselight.brightness = CASE_LIGHT_DEFAULT_BRIGHTNESS);
 
+  #if ENABLED(RTS_AVAILABLE)
+      language_change_font = 2;
+  #endif
+
   //
   // TOUCH_SCREEN_CALIBRATION
   //
@@ -2712,9 +2741,6 @@ void MarlinSettings::reset() {
   TERN_(ENABLE_LEVELING_FADE_HEIGHT, new_z_fade_height = (DEFAULT_LEVELING_FADE_HEIGHT));
   TERN_(HAS_LEVELING, reset_bed_level());
 
- #if HAS_LEVELING
-    set_bed_leveling_enabled(true);
-  #endif
   #if HAS_BED_PROBE
     constexpr float dpo[] = NOZZLE_TO_PROBE_OFFSET;
     static_assert(COUNT(dpo) == 3, "NOZZLE_TO_PROBE_OFFSET must contain offsets for X, Y, and Z.");
@@ -2921,6 +2947,8 @@ void MarlinSettings::reset() {
   // Power-Loss Recovery
   //
   TERN_(POWER_LOSS_RECOVERY, recovery.enable(ENABLED(PLR_ENABLED_DEFAULT)));
+  TERN_(CREALITY_POWER_LOSS, pre01_power_loss.enable(ENABLED(PLR_ENABLED_DEFAULT)));
+
 
   //
   // Firmware Retraction
@@ -3504,6 +3532,9 @@ void MarlinSettings::reset() {
     #if ENABLED(POWER_LOSS_RECOVERY)
       CONFIG_ECHO_HEADING("Power-Loss Recovery:");
       CONFIG_ECHO_MSG("  M413 S", recovery.enabled);
+    #elif ENABLED(CREALITY_POWER_LOSS)
+      CONFIG_ECHO_HEADING("Power-Loss Recovery:");
+      CONFIG_ECHO_MSG("  M413 S", pre01_power_loss.enabled);
     #endif
 
     #if ENABLED(FWRETRACT)

@@ -24,6 +24,7 @@
  * Creality S1 (STM32F103RET6) board pin assignments
  */
 #include "env_validate.h"
+
 #if HOTENDS > 1 || E_STEPPERS > 1
   #error "Creality S1 only supports one hotend / E-stepper. Comment out this line to continue."
 #endif
@@ -31,9 +32,11 @@
 #ifndef BOARD_INFO_NAME
   #define BOARD_INFO_NAME      "CR-FDM-V24S1-301"
 #endif
-#ifndef DEFAULT_MACHINE_NAME
-  #define DEFAULT_MACHINE_NAME "Ender 3 S1"
-#endif
+
+
+// #ifndef DEFAULT_MACHINE_NAME
+//   #define DEFAULT_MACHINE_NAME "Ender 3 S1"
+// #endif
 
 #define BOARD_NO_NATIVE_USB
 
@@ -54,6 +57,12 @@
 #endif
 
 
+// POWER LOSS 数据保存地址
+#define EEPROM_PLR
+#if ENABLED(EEPROM_PLR)
+  #define PLR_ADDR 800
+#endif
+
 //
 // Limit Switches
 //
@@ -61,11 +70,11 @@
 #define Y_STOP_PIN                          PA6
 #ifdef BLTOUCH
   #define Z_STOP_PIN         PC14  // BLTouch IN PIN  原理图TOUCH的管脚已经变-----zy
-  #define SERVO0_PIN         PC13  // BLTouch PWM-OUT PIN  原理图TOUCH的管脚已经变-----zy
+  #define SERVO0_PIN         PC13  // BLTouch PWM-OUT PIN  原理图TOUCH的管脚已经变-----zy1
   #define Z_STOP_PIN_NADD    PA15   //Added z-axis limit switch  rock_20210816
 #else
   #define Z_STOP_PIN         PA15  //Z轴限位开关
-  #define Z_STOP_PIN          ONE
+  // #define Z_STOP_PIN          ONE
 #endif
 
 //#define one (c14 || a15)
@@ -233,4 +242,22 @@
    #define SPINDLE_DIR_PIN                  PC0  // FET 4
    
    #define LASER_SOFT_PWM_PIN				PC0  //激光软PWM引脚
-  #endif
+#endif
+
+// #define LED_CONTROL_PIN     -1
+
+//
+// Suicide Power
+//
+// #define SHUTIDOWN_PIN       -1
+// #define MOTOR_CIRCUIT_PIN   -1
+
+//
+// Motor Protect
+//
+// #define MOTOR_PROTECT_PIN   -1
+
+//
+// WiFI Reset
+//
+// #define RESET_WIFI_PIN      -1

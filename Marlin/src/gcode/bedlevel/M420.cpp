@@ -59,7 +59,7 @@
  *   S2        Create a simple random mesh and enable
  */
 void GcodeSuite::M420() {
-  const bool seen_S = parser.seen('S'),
+  const bool seen_S = parser.seen('S'),   //
              to_enable = seen_S ? parser.value_bool() : planner.leveling_active;
 
   #if ENABLED(MARLIN_DEV_MODE)

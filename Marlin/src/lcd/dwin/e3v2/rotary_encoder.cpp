@@ -41,7 +41,7 @@
 #if HAS_BUZZER
   #include "../../../libs/buzzer.h"
 #endif
-#include "../dwin_lcd.h" 
+
 #include <stdlib.h>
 
 #ifndef ENCODER_PULSES_PER_STEP
@@ -49,9 +49,7 @@
 #endif
 
 ENCODER_Rate EncoderRate;
-  extern millis_t lMs_lcd_delay; //获取当前的时间
-  extern bool LCD_TURNOFF_FLAG;//息屏标志位
-  extern uint8_t record_lcd_flag;
+
 // Buzzer
 void Encoder_tick() {
   #if PIN_EXISTS(BEEPER)
@@ -77,7 +75,6 @@ void Encoder_Configuration() {
   #endif
 }
 
-
 // Analyze encoder value and return state
 ENCODER_DiffState Encoder_ReceiveAnalyze() {
   const millis_t now = millis();
@@ -86,59 +83,21 @@ ENCODER_DiffState Encoder_ReceiveAnalyze() {
   static signed char temp_diff = 0;
 
   ENCODER_DiffState temp_diffState = ENCODER_DIFF_NO;
-  if (BUTTON_PRESSED(EN1)) 
-  {
-        newbutton |= EN_A;
-
-        #if ENABLED(ENABLE_AUTO_OFF_DISPLAY)
-          lMs_lcd_delay=millis();  //rock_20170727
-          if(LCD_TURNOFF_FLAG)   
-          {
-            LCD_TURNOFF_FLAG=false;
-            DWIN_Backlight_SetLuminance(255);
-          }
-        #endif
-  }
-  if (BUTTON_PRESSED(EN2)) 
-  {
-
-      newbutton |= EN_B;
-      #if ENABLED(ENABLE_AUTO_OFF_DISPLAY)
-        lMs_lcd_delay=millis();
-        if(LCD_TURNOFF_FLAG) 
-        {
-          LCD_TURNOFF_FLAG=false;
-          DWIN_Backlight_SetLuminance(255);           
-        }
+  if (BUTTON_PRESSED(EN1)) newbutton |= EN_A;
+  if (BUTTON_PRESSED(EN2)) newbutton |= EN_B;
+  if (BUTTON_PRESSED(ENC)) {
+    static millis_t next_click_update_ms;
+    if (ELAPSED(now, next_click_update_ms)) {
+      next_click_update_ms = millis() + 300;
+      Encoder_tick();
+      #if PIN_EXISTS(LCD_LED)
+        //LED_Action();
       #endif
-
-  }
-  if (BUTTON_PRESSED(ENC)) 
-  {
-    delay(25);  
-    if (BUTTON_PRESSED(ENC)) 
-    {
-      #if ENABLED(ENABLE_AUTO_OFF_DISPLAY)
-      lMs_lcd_delay=millis();    
-      if(LCD_TURNOFF_FLAG) 
-      {
-        LCD_TURNOFF_FLAG=false;
-        DWIN_Backlight_SetLuminance(255);
-      }
-      #endif
-      static millis_t next_click_update_ms;
-      if (ELAPSED(now, next_click_update_ms)) {
-        next_click_update_ms = millis() + 300;
-        Encoder_tick();
-        #if PIN_EXISTS(LCD_LED)
-          //LED_Action();
-        #endif
-        const bool was_waiting = wait_for_user;
-        wait_for_user = false;
-        return was_waiting ? ENCODER_DIFF_NO : ENCODER_DIFF_ENTER;
-      }
-      else return ENCODER_DIFF_NO;
-     }
+      const bool was_waiting = wait_for_user;
+      wait_for_user = false;
+      return was_waiting ? ENCODER_DIFF_NO : ENCODER_DIFF_ENTER;
+    }
+    else return ENCODER_DIFF_NO;
   }
   if (newbutton != lastEncoderBits) {
     switch (newbutton) {

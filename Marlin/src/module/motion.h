@@ -69,6 +69,10 @@ extern xyz_pos_t cartes;
   constexpr feedRate_t z_probe_fast_mm_s = MMM_TO_MMS(Z_PROBE_FEEDRATE_FAST);
 #endif
 
+#if ENABLED(Z_SAFE_HOMING)
+  constexpr xy_float_t safe_homing_xy = { Z_SAFE_HOMING_X_POINT, Z_SAFE_HOMING_Y_POINT };
+#endif
+
 /**
  * Feed rates are often configured with mm/m
  * but the planner and stepper like mm/s units.

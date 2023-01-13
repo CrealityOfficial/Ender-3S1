@@ -71,7 +71,7 @@ enum processID : uint8_t {
   // Last Process ID
   Last_Prepare,
 
-  // Advance Settings  //20210724 _rock
+  // Advance Settings
   AdvSet,
   ProbeOff,
   ProbeOffX,
@@ -79,29 +79,12 @@ enum processID : uint8_t {
 
   // Back Process ID
   Back_Main,
-  Back_Main_Homing,
   Back_Print,
 
   // Date variable ID
   Move_X,
   Move_Y,
   Move_Z,
-  // 107011 -20210910 激光模式
-  #if HAS_CUTTER
-    LaserAxisMove,
-    Laser_Tune,
-    Laser_Prepare,
-    Laser_Control,
-    Tune_Move_X, 
-    Tune_Move_Y,
-    Tune_Move_Z,
-    Select_Device, // 选择FDM/Laser界面
-    Laser_Print_Warning,
-    Laser_Fdm_Sw_Warning,
-    Laser_Focus,
-    Laser_Focus_Move_Z,
-  #endif// 107011 -20210910
-
   #if HAS_HOTEND
     Extruder,
     ETemp,
@@ -118,16 +101,9 @@ enum processID : uint8_t {
   // Window ID
   Print_window,
   Filament_window,
-  Popup_Window,
-  //拔卡界面
-  Remove_card_window   
+  Popup_Window
 };
-//温度补偿类型
-enum type_temperature_compensation
-{
-  NOZZLE=1,
-  BED
-}; 
+
 // Picture ID
 #define Start_Process       0
 #define Language_English    1
@@ -231,66 +207,6 @@ enum type_temperature_compensation
 #define ICON_Confirm_E            89
 #define ICON_Info_0               90
 #define ICON_Info_1               91
-#define ICON_Power_On_Home_C      92//ICON_Degree               92
-
-#define  ICON_Card_Remove_C       93
-#define  ICON_Card_Remove_E       94
-
-#define ICON_NozzleType           95  
-#define ICON_ControlFdm           96
-#define ICON_ControlLaser         97
-#define ICON_SetOrigin            98
-#define ICON_MainLaser            99
-#define ICON_MainFdm              100
-#define ICON_Laser_W_1            101
-#define ICON_Laser_W_2            102
-#define ICON_RunRange             103
-#define ICON_Note                 104
-#define ICON_SwConfirm_C          105
-#define ICON_Return_C             106
-#define ICON_SwConfirm_E          107
-#define ICON_Return_E             108
-#define ICON_RunRange_C           109
-#define ICON_RunRange_E           110
-#define ICON_DirectPrinting_C     111
-#define ICON_DirectPrinting_E     112
-#define ICON_NotSelect            113
-#define ICON_Selected             114
-#define ICON_AutoHome_0           115
-#define ICON_AutoHome_1           116
-#define ICON_GRAY_TUNE            117 // 灰色不可选中的设置按钮
-#define LABEL_GRAY_TUNE_C         118 //"设置"
-#define LABEL_GRAY_TUNE_E         119 // "Tune"
-#define LABEL_SELECT_FINISH_C     120
-#define LABEL_NOSELECT_FINISH_C   121
-#define LABEL_SELECT_FINISH_E     122
-#define LABEL_NOSELECT_FINISH_E   123
-#define LABEL_FOCUS_C             124
-#define LABEL_FOCUS_E             125
-#define LABEL_AUTOHOME            126
-#define ICON_BG_FOCUS             127
-#define LABEL_FOCUS_HINT_C        128
-#define LABEL_FOCUS_HINT_E        129
-
-#define ICON_WR_SELECT_TUNE_C     130
-#define ICON_WR_SELECT_TUNE_E     131
-#define LABEL_WR_NOSELECT_TUNE_C  132
-
-#define FILAMENT_TIPS_C           133
-#define POWER_LOW_TIPS_C          134
-#define CARD_REMOVE_TIPS_C        135
-#define LEVEL_TIPS_C              136
-#define AUTOHOME_TIPS_C           137
-#define NOZZLE_TEMP_TOOLOW_TIPS_C 138
-#define PAUSE_PRINT_TIPS_C        139
-#define STOP_PRINT_TIPS_C         140
-#define PAUSE_ENGRAVING_TIPS_C    141
-#define STOP_ENGRAVING_TIPS_C     142
-
-
-
-
-
 
 #define ICON_AdvSet               ICON_Language
 #define ICON_HomeOff              ICON_AdvSet
@@ -339,8 +255,7 @@ extern char print_filename[16];
 
 extern millis_t dwin_heat_time;
 
-typedef struct 
-{
+typedef struct {
   #if ENABLED(HAS_HOTEND)
     celsius_t E_Temp = 0;
   #endif
@@ -381,17 +296,7 @@ typedef struct {
   bool done_confirm_flag:1;
   bool select_flag:1;
   bool home_flag:1;
-  bool heat_flag:1;                  // 0: heating done  1: during heating
-  bool cutting_line_flag:1;         //断料检测标志位
-  bool filement_resume_flag:1;      //本地断料状态是否恢复，0：已经恢复，可以接收云指令；1：还在缺料状态，不能接收云控制指令
-  bool remove_card_flag:1;          //拔卡检测标志位
-  bool flash_remain_time_flag:1;   //刷新剩余时间标志位
-  bool demarcate_flag:1;            //温度标定标志位 1：需要温度标定，0：不需要温度标定
-  bool online_pause_flag:1;         //联机打印暂停指令标志位，解决双料打印中间暂停，需要人为恢复打印。
-  bool disallow_recovery_flag:1;  //不允许恢复标志位
-  bool cloud_printing_flag:1;     //云打印标志
-  bool power_back_to_zero_flag:1; //上电回零标志位
-  bool disable_queued_cmd :1; //云打印中断料后禁止响应gcode指令
+  bool heat_flag:1;  // 0: heating done  1: during heating
   #if ENABLED(PREVENT_COLD_EXTRUSION)
     bool ETempTooLow_flag:1;
   #endif
@@ -403,7 +308,6 @@ typedef struct {
 
 extern HMI_value_t HMI_ValueStruct;
 extern HMI_Flag_t HMI_flag;
-extern uint32_t _remain_time;   //rock_20210830
 // Show ICO
 void ICON_Print(bool show);
 void ICON_Prepare(bool show);
@@ -412,10 +316,8 @@ void ICON_Leveling(bool show);
 void ICON_StartInfo(bool show);
 
 void ICON_Setting(bool show);
-// void ICON_Pause(bool show);
-// void ICON_Continue(bool show);
-void ICON_Pause();
-void ICON_Continue();
+void ICON_Pause(bool show);
+void ICON_Continue(bool show);
 void ICON_Stop(bool show);
 
 #if HAS_HOTEND || HAS_HEATED_BED
@@ -487,11 +389,6 @@ void HMI_Motion();      // Sports menu
 void HMI_Info();        // Information menu
 void HMI_Tune();        // Adjust the menu
 
-
-//107011 -20210918
-void Draw_Laser_Status_Area(const bool with_update);
-void Clear_Status_Area();
-
 #if HAS_PREHEAT
   void HMI_PLAPreheatSetting(); // PLA warm-up setting
   void HMI_ABSPreheatSetting(); // ABS warm-up setting
@@ -518,37 +415,3 @@ void HMI_SetLanguage();
 
 
 void Popup_window_Filament(void);
-void Popup_window_Remove_card(void);
-void Remove_card_window_check(void);
-void ICON_Continue();
-
-//云打印宏
-#define TEXTBYTELEN     20  //文件名长度
-#define MaxFileNumber   20   //最大文件数
-
-#define AUTO_BED_LEVEL_PREHEAT  120  
-
-#define FileNum             MaxFileNumber
-#define FileNameLen         TEXTBYTELEN
-#define RTS_UPDATE_INTERVAL 2000
-#define RTS_UPDATE_VALUE    RTS_UPDATE_INTERVAL
-
-#define SizeofDatabuf       26
-
-typedef struct CardRecord
-{
-  int recordcount;
-  int Filesum;
-  unsigned long addr[FileNum];
-  char Cardshowfilename[FileNum][FileNameLen];
-  char Cardfilename[FileNum][FileNameLen];
-}CRec;
-
-extern CRec CardRecbuf;
-
-
-extern uint8_t Cloud_Progress_Bar; //云打印传输的进度条数据
-
-extern void Draw_Print_ProgressRemain();
-
-/////////////////////////////////////////////////////

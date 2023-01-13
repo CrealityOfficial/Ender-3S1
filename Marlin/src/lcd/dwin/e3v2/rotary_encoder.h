@@ -45,8 +45,7 @@ typedef enum {
   ENCODER_DIFF_NO    = 0,  // no state
   ENCODER_DIFF_CW    = 1,  // clockwise rotation
   ENCODER_DIFF_CCW   = 2,  // counterclockwise rotation
-  ENCODER_DIFF_ENTER = 3,   // click
-  ENCODER_DIFF_LONG_PRESS = 4//Long press  rock_20210910
+  ENCODER_DIFF_ENTER = 3   // click
 } ENCODER_DiffState;
 
 // Encoder initialization

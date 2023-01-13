@@ -23,17 +23,16 @@
 /**
  * Creality S1 (STM32F103RET6) board pin assignments
  */
-#include "env_validate.h"
 
 #if HOTENDS > 1 || E_STEPPERS > 1
   #error "Creality S1 only supports one hotend / E-stepper. Comment out this line to continue."
 #endif
 
 #ifndef BOARD_INFO_NAME
-  #define BOARD_INFO_NAME      "CR-FDM-V24S1-301"
+  #define BOARD_INFO_NAME      "Creality PRE01"
 #endif
 #ifndef DEFAULT_MACHINE_NAME
-  #define DEFAULT_MACHINE_NAME "Ender 3 S1"
+  #define DEFAULT_MACHINE_NAME "Ender 3 S1 Pro"
 #endif
 
 #define BOARD_NO_NATIVE_USB
@@ -41,10 +40,10 @@
 //
 // EEPROM
 //
-//#if NO_EEPROM_SELECTED
+#if NO_EEPROM_SELECTED
   #define IIC_BL24CXX_EEPROM                      // EEPROM on I2C-0
   //#define SDCARD_EEPROM_EMULATION
-//#endif
+#endif
 
 #if ENABLED(IIC_BL24CXX_EEPROM)
   #define IIC_EEPROM_SDA                    PA11
@@ -52,6 +51,12 @@
   #define MARLIN_EEPROM_SIZE                0x800  // 2Kb (24C16)
 #elif ENABLED(SDCARD_EEPROM_EMULATION)
   #define MARLIN_EEPROM_SIZE                0x800  // 2Kb
+#endif
+
+// POWER LOSS 数据保存地址
+#define EEPROM_PLR
+#if ENABLED(EEPROM_PLR)
+  #define PLR_ADDR 800
 #endif
 
 
@@ -62,13 +67,16 @@
 #define Y_STOP_PIN                          PA6
 #ifdef BLTOUCH
   #define Z_STOP_PIN         PC14  // BLTouch IN PIN  原理图TOUCH的管脚已经变-----zy
-  #define SERVO0_PIN         PC13  // BLTouch PWM-OUT PIN  原理图TOUCH的管脚已经变-----zy
-  #define Z_STOP_PIN_NADD    PA15   //Added z-axis limit switch  rock_20210816
+  #define SERVO0_PIN         PC13  // BLTouch OUT PIN  原理图TOUCH的管脚已经变-----zy
+#elif ENABLED(FIX_MOUNTED_PROBE)
+  #define Z_MIN_PIN                          -1
+  #define COM_PIN                            -1
 #else
-  #define Z_STOP_PIN         PA15  //Z轴限位开关
+  #define Z_STOP_PIN         PA15
 #endif
-
-//#define one (c14 || a15)
+#if ENABLED(Z_AXIS_LIMIT_MODE)
+  #define SERVO0_PIN         PC13  // BLTouch OUT PIN  原理图TOUCH的管脚已经变-----zy
+#endif
 
 #ifndef Z_MIN_PROBE_PIN
   #define Z_MIN_PROBE_PIN                   PC14   // BLTouch IN
@@ -81,7 +89,7 @@
   #define FIL_RUNOUT_PIN                    PC15   // "Pulled-high"
 #endif
 
-#define HAS_CHECKFILAMENT
+// #define HAS_CHECKFILAMENT
 /* CHECKFILAMENT */
 #if ENABLED(HAS_CHECKFILAMENT)
   #define CHECKFILAMENT_PIN  PC15
@@ -144,8 +152,8 @@
 //
 // Heaters / Fans
 //
-#define HEATER_0_PIN                        PA1    // HEATER1
-#define HEATER_BED_PIN                      PA7 //PA15   // HOT BED
+#define HEATER_0_PIN                        PA1   // HEATER1
+#define HEATER_BED_PIN                      PA7   // HOT BED
 
 #ifndef FAN_PIN
   #define FAN_PIN                           PA0   // FAN
@@ -157,12 +165,12 @@
 //
 // SD Card
 //
-#define SD_DETECT_PIN                    PC7
-#define SDCARD_CONNECTION                ONBOARD
-#define ONBOARD_SPI_DEVICE               1
-#define ONBOARD_SD_CS_PIN                PA4   // SDSS
+#define SD_DETECT_PIN                       PC7
+#define SDCARD_CONNECTION                   ONBOARD
+#define ONBOARD_SPI_DEVICE                  1
+#define ONBOARD_SD_CS_PIN                   PA4   // SDSS
 #define SDIO_SUPPORT
-#define NO_SD_HOST_DRIVE                  // This board's SD is only seen by the printer
+#define NO_SD_HOST_DRIVE                          // This board's SD is only seen by the printer
 
 #if ENABLED(CR10_STOCKDISPLAY) && NONE(RET6_12864_LCD, VET6_12864_LCD)
   #error "Define RET6_12864_LCD or VET6_12864_LCD to select pins for CR10_STOCKDISPLAY with the Creality V4 controller."
@@ -176,61 +184,43 @@
   #define LCD_PINS_D4                       PB13
 
   #define BTN_ENC                           PB2
-  #define BTN_EN1                           PB10
+  #define BTN_EN1                           -1//PA2
   #define BTN_EN2                           PB14
 
   #ifndef HAS_PIN_27_BOARD
     #define BEEPER_PIN                      PC6
   #endif
 
-#elif ENABLED(VET6_12864_LCD)
-
-  // VET6 12864 LCD
-  #define LCD_PINS_RS                       PA4
-  //#define LCD_PINS_ENABLE                   PA7
-  #define LCD_PINS_D4                       PA5
-
-  #define BTN_ENC                           PC5
-  #define BTN_EN1                           PB10
-  #define BTN_EN2                           PA6
-
-#elif ENABLED(DWIN_CREALITY_LCD)
-
-  // RET6 DWIN ENCODER LCD
-  #define BTN_ENC                           PB14
-  #define BTN_EN1                           PB15
-  #define BTN_EN2                           PB12
-
-  //#define LCD_LED_PIN                     PB2
-  #ifndef BEEPER_PIN
-    #define BEEPER_PIN                      PB13
-    #undef SPEAKER
-  #endif
-
-#elif ENABLED(DWIN_VET6_CREALITY_LCD)
-
-  // VET6 DWIN ENCODER LCD
-  #define BTN_ENC                           PA6
-  //#define BTN_EN1                           PA7
-  #define BTN_EN2                           PA4
-
-  #define BEEPER_PIN                        PA5
-
 #endif
 
+
+#if HAS_CUTTER
+  // #undef HEATER_0_PIN
+  // #undef HEATER_BED_PIN
+// #undef FAN_PIN
+// #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1    
+// #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET  
+// #define SPINDLE_DIR_PIN                  PC0  // FET 4   
+  #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1
+  #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET
+  #define SPINDLE_DIR_PIN                  PC0  // FET 4
+  
+  #define LASER_SOFT_PWM_PIN				PC0  //激光软PWM引脚
+#endif
+// #define LED_CONTROL_PIN     -1
+
 //
-// M3/M4/M5 - Spindle/Laser Control
+// Suicide Power
 //
- #if HAS_CUTTER
-   // #undef HEATER_0_PIN
-   // #undef HEATER_BED_PIN
-  // #undef FAN_PIN
-  // #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1    
-  // #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET  
-  // #define SPINDLE_DIR_PIN                  PC0  // FET 4   
-   #define SPINDLE_LASER_ENA_PIN            PC0  // FET 1
-   #define SPINDLE_LASER_PWM_PIN            PC0  // Bed FET
-   #define SPINDLE_DIR_PIN                  PC0  // FET 4
-   
-   #define LASER_SOFT_PWM_PIN				PC0  //激光软PWM引脚
-  #endif
+// #define SHUTIDOWN_PIN       -1
+// #define MOTOR_CIRCUIT_PIN   -1
+
+//
+// Motor Protect
+//
+// #define MOTOR_PROTECT_PIN   -1
+
+//
+// WiFI Reset
+//
+// #define RESET_WIFI_PIN      -1

@@ -50,7 +50,7 @@ enum AxisEnum : uint8_t {
   X_AXIS = 0, A_AXIS = X_AXIS,
   Y_AXIS = 1, B_AXIS = Y_AXIS,
   Z_AXIS = 2, C_AXIS = Z_AXIS,
-  E_AXIS = 3,
+  E_AXIS,
   X_HEAD, Y_HEAD, Z_HEAD,
   E0_AXIS = E_AXIS,
   E1_AXIS, E2_AXIS, E3_AXIS, E4_AXIS, E5_AXIS, E6_AXIS, E7_AXIS,

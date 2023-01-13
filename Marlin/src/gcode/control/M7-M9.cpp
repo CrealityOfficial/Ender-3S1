@@ -66,10 +66,8 @@ void GcodeSuite::M9() {
 
 #include "../gcode.h"
 #include "../../module/planner.h"
-
-#if HAS_CUTTER
 #include "../../feature/spindle_laser.h"
-#endif
+
 /**
  * M8: Air Assist On
  */

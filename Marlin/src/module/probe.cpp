@@ -81,6 +81,10 @@
   #include "../lcd/extui/ui_api.h"
 #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
+#endif
+
 #define DEBUG_OUT ENABLED(DEBUG_LEVELING_FEATURE)
 #include "../core/debug_out.h"
 
@@ -595,6 +599,9 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     // Do a first probe at the fast speed
     const bool probe_fail = probe_down_to_z(z_probe_low_point, fr_mm_s),            // No probe trigger?
                early_fail = (scheck && current_position.z > -offset.z + clearance); // Probe triggered too high?
+    #if ENABLED(FIX_MOUNTED_PROBE)
+      Count_probe = 1;
+    #endif
     #if ENABLED(DEBUG_LEVELING_FEATURE)
       if (DEBUGGING(LEVELING) && (probe_fail || early_fail)) {
         DEBUG_ECHOPGM_P(plbl);
@@ -646,6 +653,14 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     float probes[TOTAL_PROBING];
   #endif
 
+  // #if ENABLED(FIX_MOUNTED_PROBE)
+  //   digitalWrite(COM_PIN, HIGH);
+  //   delay(200);
+  //   digitalWrite(COM_PIN, LOW);
+  //   delay(200);
+  //   AutohomeZflag = false;
+  // #endif
+
   #if TOTAL_PROBING > 2
     float probes_z_sum = 0;
     for (
@@ -659,6 +674,11 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     {
       // If the probe won't tare, return
       if (TERN0(PROBE_TARE, tare())) return true;
+
+      // Probe downward slowly to find the bed
+      #if ENABLED(FIX_MOUNTED_PROBE)
+        Count_probe = 2;
+      #endif
 
       // Probe downward slowly to find the bed
       if (try_to_probe(PSTR("SLOW"), z_probe_low_point, MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW),
@@ -787,14 +807,23 @@ float Probe::probe_at_point(const_float_t rx, const_float_t ry, const ProbePtRai
       SERIAL_ECHOLNPAIR("Bed X: ", LOGICAL_X_POSITION(rx), " Y: ", LOGICAL_Y_POSITION(ry), " Z: ", measured_z);
   }
 
-  if (isnan(measured_z)) 
-  {
+  if (isnan(measured_z)) {
+    
+    #if ENABLED(RTS_AVAILABLE)
+      waitway = 0;
+      rtscheck.RTS_SndData(ExchangePageBase + 41, ExchangepageAddr);
+      change_page_font = 41;
+      rtscheck.RTS_SndData(Error_203, ABNORMAL_PAGE_TEXT_VP);
+      errorway = 3;
+    #endif
+
     stow();
     LCD_MESSAGEPGM(MSG_LCD_PROBING_FAILED);
     #if DISABLED(G29_RETRY_AND_RECOVER)
       SERIAL_ERROR_MSG(STR_ERR_PROBING_FAILED);
     #endif
   }
+
   return measured_z;
 }
 

@@ -51,15 +51,22 @@ GCodeQueue queue;
 
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if ENABLED(GCODE_REPEAT_MARKERS)
   #include "../feature/repeat.h"
 #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
+#endif
+
 #if HAS_CUTTER
   #include "../feature/spindle_laser.h"
 #endif
+
 
 // Frequently used G-code strings
 PGMSTR(G28_STR, "G28");
@@ -93,6 +100,7 @@ void GCodeQueue::RingBuffer::commit_command(bool skip_ok
   commands[index_w].skip_ok = skip_ok;
   TERN_(HAS_MULTI_SERIAL, commands[index_w].port = serial_ind);
   TERN_(POWER_LOSS_RECOVERY, recovery.commit_sdpos(index_w));
+  TERN_(CREALITY_POWER_LOSS, pre01_power_loss.commit_sdpos(index_w));
   advance_pos(index_w, 1);
 }
 
@@ -309,7 +317,6 @@ FORCE_INLINE bool is_M29(const char * const cmd) {  // matches "M29" & "M29 ", b
   return m29 && !NUMERIC(m29[3]);
 }
 
-
 #if HAS_CUTTER
 
 // 107011 -20210913 
@@ -332,7 +339,7 @@ void get_gcode_comment()
             laser_device.set_laser_range((laser_device_range)i, atof(p));// = atof(p+5);
             break;
             //SERIAL_ECHOLNPAIR(laser_device.laser_cmp_info[i], laser_device.get_laser_range((laser_device_range)i));
-          }else if(p = strstr((char*)&buf[0], "estimated_time")) { // 读取gcode中的模型打印时间 107011 -20211116
+          }else if((p = strstr((char*)&buf[0], "estimated_time"))!= nullptr) { // 读取gcode中的模型打印时间 107011 -20211116
             p += strlen("estimated_time(s):");
             while(*p==' ') p++;
             laser_device.remain_time = atof(p)+59; // +59 解决转换为整型的分钟的小数点后被舍弃的问题
@@ -589,29 +596,27 @@ void GCodeQueue::get_serial_commands() {
    * always receives complete command-lines, they can go directly
    * into the main command queue.
    */
-   uint16_t SD_ReadTimeout = 0;
-  bool SD_Card_status = true;
-  bool sd_printing_autopause = false;
-
-  inline void GCodeQueue::get_sdcard_commands() 
-  {
+  // uint16_t SD_ReadTimeout = 0;
+  // bool SD_Card_status = true;
+  // bool sd_printing_autopause = false;
+  
+  inline void GCodeQueue::get_sdcard_commands() {
     static uint8_t sd_input_state = PS_NORMAL;
 
     // Get commands if there are more in the file
-    if (!IS_SD_FETCHING())  return;
+    if (!IS_SD_FETCHING()) return;
+
     int sd_count = 0;
-    while (!ring_buffer.full() && !card.eof() && IS_SD_INSERTED()) 
-    {
+    while (!ring_buffer.full() && !card.eof() && rtscheck.RTS_SD_Detected()) {
       const int16_t n = card.get();
       const bool card_eof = card.eof();
-
       if (n < 0 && !card_eof) { SERIAL_ERROR_MSG(STR_SD_ERR_READ); continue; }
-   
+
       CommandLine &command = ring_buffer.commands[ring_buffer.index_w];
       const char sd_char = (char)n;
       const bool is_eol = ISEOL(sd_char);
-      if (is_eol || card_eof) 
-      {
+      if (is_eol || card_eof) {
+
         // Reset stream state, terminate the buffer, and commit a non-empty command
         if (!is_eol && sd_count) ++sd_count;          // End of file with no newline
         if (!process_line_done(sd_input_state, command.buffer, sd_count)) {
@@ -631,12 +636,43 @@ void GCodeQueue::get_serial_commands() {
 
           // Prime Power-Loss Recovery for the NEXT commit_command
           TERN_(POWER_LOSS_RECOVERY, recovery.cmd_sdpos = card.getIndex());
+          TERN_(CREALITY_POWER_LOSS, pre01_power_loss.cmd_sdpos = card.getIndex());
         }
 
         if (card.eof()) card.fileHasFinished();         // Handle end of file reached
       }
       else
+      {
         process_stream_char(sd_char, sd_input_state, command.buffer, sd_count);
+      }
+      #if ENABLED(RTS_AVAILABLE)
+        // the printing results
+        if (card_eof)
+        {
+          rtscheck.RTS_SndData(100, PRINT_PROCESS_VP);
+          delay(1);
+          rtscheck.RTS_SndData(100, PRINT_PROCESS_ICON_VP);
+          delay(1);
+
+          #if HAS_CUTTER
+            if(laser_device.is_laser_device()){ 
+              // rtscheck.RTS_SndData(ExchangePageBase + 60, ExchangepageAddr);
+              //  change_page_font = 60;
+            }else
+          #endif
+          {
+            rtscheck.RTS_SndData(ExchangePageBase + 9, ExchangepageAddr);
+             change_page_font = 9;
+          }
+
+          // if(flag_over_shutdown)
+          // {
+          //   // Start the automatic shutdown timer after printing
+          //   flag_counter_printover_to_shutdown = true;
+          // }
+        }
+      #endif
+        
     }
   }
 
@@ -690,11 +726,9 @@ void GCodeQueue::get_available_commands() {
     }else 
   #endif
   {
-  TERN_(SDSUPPORT, get_sdcard_commands());
+    TERN_(SDSUPPORT, get_sdcard_commands());
   }
 }
-
-
 
 /**
  * Run the entire queue in-place. Blocks SD completion/abort until complete.

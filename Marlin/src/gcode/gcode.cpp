@@ -35,6 +35,7 @@ GcodeSuite gcode;
 #include "parser.h"
 #include "queue.h"
 #include "../module/motion.h"
+#include "../feature/bedlevel/bedlevel.h"
 
 #if ENABLED(PRINTCOUNTER)
   #include "../module/printcounter.h"
@@ -47,6 +48,9 @@ GcodeSuite gcode;
 #if ENABLED(POWER_LOSS_RECOVERY)
   #include "../sd/cardreader.h"
   #include "../feature/powerloss.h"
+#elif ENABLED(CREALITY_POWER_LOSS)
+  #include "../sd/cardreader.h"
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
 #endif
 
 #if ENABLED(CANCEL_OBJECTS)
@@ -64,9 +68,10 @@ GcodeSuite gcode;
 #if ENABLED(PASSWORD_FEATURE)
   #include "../feature/password/password.h"
 #endif
-
+#if ENABLED(CREALITY_POWER_LOSS)
+  #include "../feature/PRE01_Power_loss/PRE01_Power_loss.h"
+#endif
 #include "../MarlinCore.h" // for idle, kill
-#include "../lcd/dwin/e3v2/dwin.h"  //
 
 // Inactivity shutdown
 millis_t GcodeSuite::previous_move_ms = 0,
@@ -173,16 +178,13 @@ void GcodeSuite::get_destination_from_command() {
   #if ENABLED(POWER_LOSS_RECOVERY) && !PIN_EXISTS(POWER_LOSS)
     // Only update power loss recovery on moves with E
     if (recovery.enabled && IS_SD_PRINTING() && seen.e && (seen.x || seen.y))
-      #if ENABLED(CREALITY_ENDER3_2021)
-      //////
-      #else 
-        recovery.save();  //rock_20211016
-      #endif
-    #endif
+      recovery.save();
+  #elif ENABLED(CREALITY_POWER_LOSS) && !PIN_EXISTS(POWER_LOSS)
+      // Only update power loss recovery on moves with E
+    if (pre01_power_loss.enabled && IS_SD_PRINTING() && seen.e && (seen.x || seen.y))
+      pre01_power_loss.save();
+  #endif
 
-  //if(1){;} //107011 -20211008如果不加这行 下一行if(parser.linearval('F') > 0)会无效， bug未知， 之后再找
-  asm("nop");
-  asm("nop");//rock_20211009  解决不能设置速度的问题。
   if (parser.linearval('F') > 0)
     feedrate_mm_s = parser.value_feedrate();
 
@@ -197,7 +199,7 @@ void GcodeSuite::get_destination_from_command() {
   #endif
 
   #if ENABLED(LASER_FEATURE)
-    if(laser_device.is_laser_device()){ //FDM 打印激光Gcode时，"S"参数会造成死机
+    if(laser_device.is_laser_device()){ //修复 FDM 打印激光Gcode时，"S"参数会造成死机的bug
       if (cutter.cutter_mode == CUTTER_MODE_CONTINUOUS || cutter.cutter_mode == CUTTER_MODE_DYNAMIC) {
         // Set the cutter power in the planner to configure this move
         cutter.last_feedrate_mm_m = 0;
@@ -212,9 +214,10 @@ void GcodeSuite::get_destination_from_command() {
             }else {
               cutter.inline_power(cutter.power_to_range(cutter_power_t(spwr)));
             }
-          }else{ // 107011 -20210925 不带S参数的关闭激光
-            cutter.inline_power(0);
           }
+          // else{ // 107011 -20210925 不带S参数的关闭激光
+          //   cutter.inline_power(0);
+          // }
         }
         else if (parser.codenum == 0) {
           planner.laser_inline.status.isPowered = false; // For dynamic mode we need to flag it off
@@ -318,12 +321,11 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       return;
     }
   #endif
-  //云打印中断料后禁止响应Gcode指令
-   if(HMI_flag.cloud_printing_flag&&HMI_flag.disable_queued_cmd)return; 
 
   // Handle a known command or reply "unknown command"
 
   switch (parser.command_letter) {
+
     case 'G': switch (parser.codenum) {
 
       case 0: case 1:                                             // G0: Fast Move, G1: Linear Move
@@ -530,7 +532,7 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       #if ENABLED(Z_MIN_PROBE_REPEATABILITY_TEST)
         case 48: M48(); break;                                    // M48: Z probe repeatability test
       #endif
-      case 72: M72(); break;                                      // M72: Cloud print filename rock_20211017
+
       #if ENABLED(LCD_SET_PROGRESS_MANUALLY)
         case 73: M73(); break;                                    // M73: Set progress percentage (for display on LCD)
       #endif
@@ -542,8 +544,7 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       #if ENABLED(PRINTCOUNTER)
         case 78: M78(); break;                                    // M78: Show print statistics
       #endif
-     
-        case 79: M79();        break;                                            // M79: Cloud print statistics
+
       #if ENABLED(M100_FREE_MEMORY_WATCHER)
         case 100: M100(); break;                                  // M100: Free Memory Report
       #endif
@@ -1017,6 +1018,8 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       #if ENABLED(POWER_LOSS_RECOVERY)
         case 413: M413(); break;                                  // M413: Enable/disable/query Power-Loss Recovery
         case 1000: M1000(); break;                                // M1000: [INTERNAL] Resume from power-loss
+      #elif ENABLED(CREALITY_POWER_LOSS)
+        case 413: M413(); break;                                  // M413: Enable/disable/query Power-Loss Recovery
       #endif
 
       #if ENABLED(SDSUPPORT)
@@ -1034,7 +1037,6 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
       #if ENABLED(MAX7219_GCODE)
         case 7219: M7219(); break;                                // M7219: Set LEDs, columns, and rows
       #endif
-      case 936: M936(); break;                             // M936: OTA update firmware.
 
       default: parser.unknown_command_warning(); break;
     }
@@ -1076,6 +1078,7 @@ void GcodeSuite::process_next_command() {
   PORT_REDIRECT(SERIAL_PORTMASK(command.port));
 
   TERN_(POWER_LOSS_RECOVERY, recovery.queue_index_r = queue.ring_buffer.index_r);
+  TERN_(CREALITY_POWER_LOSS, pre01_power_loss.queue_index_r = queue.ring_buffer.index_r);
 
   if (DEBUGGING(ECHO)) {
     SERIAL_ECHO_START();

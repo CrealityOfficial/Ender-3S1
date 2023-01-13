@@ -212,6 +212,7 @@ void reset_bed_level() {
 #if EITHER(MESH_BED_LEVELING, PROBE_MANUALLY)
 
   void _manual_goto_xy(const xy_pos_t &pos) {
+
     // Get the resting Z position for after the XY move
     #ifdef MANUAL_PROBE_START_Z
       constexpr float finalz = _MAX(0, MANUAL_PROBE_START_Z); // If a MANUAL_PROBE_START_Z value is set, always respect it

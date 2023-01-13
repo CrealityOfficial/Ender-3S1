@@ -71,6 +71,10 @@
   #include "../feature/babystep.h"
 #endif
 
+#if ENABLED(RTS_AVAILABLE)
+  #include "../lcd/dwin/lcd_rts.h"
+#endif
+
 #define DEBUG_OUT ENABLED(DEBUG_LEVELING_FEATURE)
 #include "../core/debug_out.h"
 
@@ -561,7 +565,7 @@ void do_blocking_move_to_xy_z(const xy_pos_t &raw, const_float_t z, const_feedRa
 
 void do_z_clearance(const_float_t zclear, const bool lower_allowed/*=false*/) {
   float zdest = zclear;
-   if (!lower_allowed) NOLESS(zdest, current_position.z);
+  if (!lower_allowed) NOLESS(zdest, current_position.z);
   do_blocking_move_to_z(_MIN(zdest, Z_MAX_POS), TERN(HAS_BED_PROBE, z_probe_fast_mm_s, homing_feedrate(Z_AXIS)));
 }
 
@@ -1364,6 +1368,13 @@ void prepare_line_to_destination() {
       DEBUG_ECHOLNPGM(")");
     }
 
+    #if ENABLED(FIX_MOoUNTED_PROBE)
+    if((axis == Z_AXIS) && (1 == READ(OPTO_SWITCH_PIN)))
+    {
+      probe.stow();
+    }
+    #endif /* end of FIX_MOoUNTED_PROBE */
+
     // Only do some things when moving towards an endstop
     const int8_t axis_home_dir = TERN0(DUAL_X_CARRIAGE, axis == X_AXIS)
                   ? TOOL_X_HOME_DIR(active_extruder) : home_dir(axis);
@@ -1423,13 +1434,12 @@ void prepare_line_to_destination() {
     planner.synchronize();
 
     if (is_home_dir) {
-     endstops.validate_homing_move();
+
+      endstops.validate_homing_move();
 
       #if HOMING_Z_WITH_PROBE && HAS_QUIET_PROBING
         if (axis == Z_AXIS && final_approach) probe.set_probing_paused(false);
       #endif
-
- 
 
       // Re-enable stealthChop if used. Disable diag1 pin on driver.
       TERN_(SENSORLESS_HOMING, end_sensorless_homing_per_axis(axis, stealth_states));
@@ -1584,13 +1594,25 @@ void prepare_line_to_destination() {
     //
     #if HOMING_Z_WITH_PROBE
       if (axis == Z_AXIS) {
-        if (TERN0(BLTOUCH, bltouch.deploy())) { 
+      //   if (TERN0(BLTOUCH, bltouch.deploy())) return;   // BLTouch was deployed above, but get the alarm state.
+      //   if (TERN0(PROBE_TARE, probe.tare())) return;
+      // }
+      if (TERN0(BLTOUCH, bltouch.deploy())) { 
           probe.stow();// 修复FDM 调平失败后，Z轴不能往下调的bug 107011 -20211014
           return; 
           }   // BLTouch was deployed above, but get the alarm state.
         if (TERN0(PROBE_TARE, probe.tare())) return;
       }
     #endif
+
+    if(axis == Z_AXIS)
+    {
+      #if ENABLED(FIX_MOUNTED_PROBE)
+        WRITE(COM_PIN, LOW);
+        delay(200);
+        WRITE(COM_PIN, HIGH);
+      #endif
+    }
 
     //
     // Back away to prevent an early X/Y sensorless trigger
@@ -1650,6 +1672,14 @@ void prepare_line_to_destination() {
       // Slow move towards endstop until triggered
       const float rebump = bump * 2;
       if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPAIR("Re-bump: ", rebump, "mm");
+      if(axis == Z_AXIS)
+      {
+        #if ENABLED(FIX_MOUNTED_PROBE)
+          WRITE(COM_PIN, LOW);
+          delay(200);
+          WRITE(COM_PIN, HIGH);
+        #endif
+      }
       do_homing_move(axis, rebump, get_homing_bump_feedrate(axis), true);
 
       #if BOTH(HOMING_Z_WITH_PROBE, BLTOUCH)
