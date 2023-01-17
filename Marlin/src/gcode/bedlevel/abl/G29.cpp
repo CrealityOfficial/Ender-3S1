@@ -698,8 +698,8 @@ G29_TYPE GcodeSuite::G29() {
                 //   rtscheck.RTS_SndData(ExchangePageBase + 26, ExchangepageAddr);
                 //   change_page_font = 26;
                 // }
-                  rtscheck.RTS_SndData((uint16_t)((6.25 * pt_index) / 2) , AUTO_BED_LEVEL_TITLE_VP);  //6.25Ϊ 1/16 ��Ϊ16���ƽ����Ĺ�ʽ��������Ҫ�޸��㷨
-                  rtscheck.RTS_SndData((uint16_t)(6.25 * pt_index), AUTO_LEVELING_PERCENT_DATA_VP);
+                  rtscheck.RTS_SndData((uint16_t)((100.0 / (GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y) * pt_index) / 2) , AUTO_BED_LEVEL_TITLE_VP);
+                  rtscheck.RTS_SndData((uint16_t)(100.0 / (GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y) * pt_index), AUTO_LEVELING_PERCENT_DATA_VP);
                   rtscheck.RTS_SndData(ExchangePageBase + 26, ExchangepageAddr);
                   change_page_font = 26;
               }
