@@ -70,7 +70,7 @@
 
 
 // @section info
-/
+
 //  #define ENDER_3S1_PLUS
 #define ENDER_3S1_PRO
   
@@ -1074,6 +1074,7 @@
  */
 /**
  *Z_MIN_PROBE_PIN
+*/
 
 //#define Z_MIN_PROBE_PIN 32 // Pin 32 is the RAMPS default
 
@@ -1083,7 +1084,7 @@
  * Allen Key Probes, Servo Probes, Z-Sled Probes, FIX_MOUNTED_PROBE, etc.
  * Activate one of these to use Auto Bed Leveling below.
  */
-/**
+
 
 /**
  * The "Manual Probe" provides a means to do "Auto" Bed Leveling without a probe.
