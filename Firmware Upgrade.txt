@@ -1,0 +1,20 @@
+﻿
+固件更新方式如下：
+	1. 将STM32F4_UPDATE文件夹放入SD卡。（反复烧写，需要更改.BIN的名称）
+	2. 重启机器等待更新完成.
+
+屏幕升级：
+	将屏幕固件文件下的DWIN_SET和TJC_SET文件夹放入tf卡->将tf卡插入屏幕的tf接口->接好屏幕排线->重启机器等待屏幕更新完成
+	
+The firmware update follows:
+1. Put the STM32F4_UPDATE folder into the SD card. (Repeated programming requires changing the name of .BIN)
+2. Restart the machine and wait for the update to complete.
+
+Screen upgrade:
+Put the DWIN_SET and TJC_SET folders under the screen firmware file into the TF card -> insert the TF card into the TF interface of the screen -> connect the screen cable -> restart the machine and wait for the screen update to complete
+
+
+
+Enjoy you life
+22/02/2023
+www.creality.com
